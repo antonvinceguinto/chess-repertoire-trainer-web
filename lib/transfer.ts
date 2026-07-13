@@ -69,6 +69,11 @@ function fromBase64Url(text: string): Uint8Array {
   return bytes;
 }
 
+/** Decode a base64url sync-code body back into its JSON payload string. */
+function decodeSyncBody(body: string): string {
+  return new TextDecoder().decode(fromBase64Url(body));
+}
+
 /* ------------------------------------------------------------------ *
  * Export
  * ------------------------------------------------------------------ */
@@ -146,18 +151,32 @@ export function parseTransfer(text: string): ParsedTransfer {
 
   let json: string;
   if (trimmed.startsWith(`${CODE_PREFIX}.`)) {
-    // Sync code. Strip interior whitespace first: transports like email hard-
-    // wrap long lines, and base64url never legitimately contains whitespace.
+    // A "COR1." sync code. Strip interior whitespace first: transports like
+    // email hard-wrap long lines, and base64url never contains whitespace.
     const body = trimmed.slice(CODE_PREFIX.length + 1).replace(/\s+/g, "");
     if (!CODE_BODY_RE.test(body)) {
       throw new TransferError("This sync code looks corrupted or incomplete.");
     }
     try {
-      json = new TextDecoder().decode(fromBase64Url(body));
+      json = decodeSyncBody(body);
     } catch {
       throw new TransferError("This sync code looks corrupted or incomplete.");
     }
+  } else if (trimmed[0] !== "{" && trimmed[0] !== "[") {
+    // No prefix and not JSON — most likely a sync code whose "COR1." prefix was
+    // lost in transit (double-clicking the code selects only the part after the
+    // ".", so a copy/paste can drop the prefix). Try to decode it as base64url.
+    const body = trimmed.replace(/\s+/g, "");
+    if (!CODE_BODY_RE.test(body)) {
+      throw new TransferError("This isn't a valid backup file or sync code.");
+    }
+    try {
+      json = decodeSyncBody(body);
+    } catch {
+      throw new TransferError("This isn't a valid backup file or sync code.");
+    }
   } else {
+    // Raw backup JSON.
     json = trimmed;
   }
 

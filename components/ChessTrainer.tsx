@@ -3,16 +3,15 @@
 import { useState } from "react";
 import { useTrainer } from "@/context/TrainerContext";
 import { useEngine } from "@/hooks/useEngine";
-import { useGaps } from "@/hooks/useGaps";
+import { useCoverage } from "@/hooks/useCoverage";
 import { BoardPanel } from "./BoardPanel";
 import { MoveList } from "./MoveList";
 import { EnginePanel } from "./EnginePanel";
 import { BookPanel } from "./BookPanel";
-import { GapsPanel } from "./GapsPanel";
+import { CoveragePanel } from "./CoveragePanel";
 import { RepertoireSelect } from "./RepertoireSelect";
-import { RepertoireTree } from "./RepertoireTree";
+import { RepertoirePanel } from "./RepertoirePanel";
 import { TrainPanel } from "./TrainPanel";
-import { Panel, PanelHeader } from "./ui";
 
 type Tab = "analysis" | "repertoire" | "gaps";
 
@@ -32,7 +31,12 @@ export function ChessTrainer() {
 
   const engineEnabled = engineOn && mode === "build";
   const { status, evaluation } = useEngine(fen, engineEnabled, multipv);
-  const { gaps, ready: gapsReady, error: gapsError } = useGaps(activeRepertoire);
+  const {
+    gaps,
+    progress,
+    ready: gapsReady,
+    error: gapsError,
+  } = useCoverage(activeRepertoire);
 
   const prepareGap = (sans: string[]) => {
     playLineSans(sans);
@@ -104,17 +108,11 @@ export function ChessTrainer() {
                 </>
               )}
 
-              {tab === "repertoire" && (
-                <Panel>
-                  <PanelHeader title="Saved lines" />
-                  <div className="max-h-[60vh] overflow-y-auto scroll-thin">
-                    <RepertoireTree />
-                  </div>
-                </Panel>
-              )}
+              {tab === "repertoire" && <RepertoirePanel />}
 
               {tab === "gaps" && (
-                <GapsPanel
+                <CoveragePanel
+                  progress={progress}
                   gaps={gaps}
                   ready={gapsReady}
                   error={gapsError}

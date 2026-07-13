@@ -1,17 +1,13 @@
 "use client";
 
-import { useTrainer } from "@/context/TrainerContext";
 import { START_FEN, formatMoveSequence } from "@/lib/chess";
 import type { Gap } from "@/lib/gaps";
-import { Panel, PanelHeader } from "./ui";
 
-interface Props {
-  gaps: Gap[];
-  ready: boolean;
-  error: boolean;
-  onPrepare: (sans: string[]) => void;
-}
-
+/**
+ * Shared row/empty-state building blocks for the coverage views. A gap is one
+ * opponent reply you haven't answered (or a line that stops on your move);
+ * tapping the row loads it so you can prepare it.
+ */
 function commonness(imp: number): { label: string; cls: string } {
   if (imp >= 0.06) return { label: "Very common", cls: "text-rose-300" };
   if (imp >= 0.02) return { label: "Common", cls: "text-amber-300" };
@@ -19,79 +15,7 @@ function commonness(imp: number): { label: string; cls: string } {
   return { label: "Rare", cls: "text-slate-400" };
 }
 
-export function GapsPanel({ gaps, ready, error, onPrepare }: Props) {
-  const { activeRepertoire } = useTrainer();
-
-  let body: React.ReactNode;
-
-  if (!activeRepertoire) {
-    body = (
-      <Empty>Create a repertoire to see which lines you still need to prepare.</Empty>
-    );
-  } else if (activeRepertoire.root.length === 0) {
-    body = (
-      <Empty>
-        Add some moves to your repertoire first — then this tab shows the common
-        lines you haven&apos;t answered yet.
-      </Empty>
-    );
-  } else if (error) {
-    body = <Empty tone="error">Could not load the opening book.</Empty>;
-  } else if (!ready) {
-    body = <Empty pulse>Scanning your repertoire for gaps…</Empty>;
-  } else if (gaps.length === 0) {
-    body = (
-      <Empty tone="ok">
-        ✓ No major gaps. Your repertoire already answers the common lines from
-        here.
-      </Empty>
-    );
-  } else {
-    const maxImp = gaps[0].importance || 1;
-    const defenses = gaps.filter((g) => g.kind === "defense").length;
-    const replies = gaps.length - defenses;
-    body = (
-      <>
-        <p className="px-1 pb-2 text-[11px] leading-relaxed text-slate-500">
-          {defenses > 0 && (
-            <>
-              <span className="text-slate-300">{defenses}</span> unanswered{" "}
-              {defenses === 1 ? "defense" : "defenses"}
-            </>
-          )}
-          {defenses > 0 && replies > 0 && " · "}
-          {replies > 0 && (
-            <>
-              <span className="text-slate-300">{replies}</span> unfinished{" "}
-              {replies === 1 ? "line" : "lines"}
-            </>
-          )}
-          . Ranked by how often you&apos;ll face them. Tap one to prepare it.
-        </p>
-        <ul className="flex flex-col gap-1">
-          {gaps.map((g, i) => (
-            <GapRow
-              key={`${g.fen}-${g.missingSan ?? "reply"}`}
-              gap={g}
-              rank={i + 1}
-              maxImp={maxImp}
-              onPrepare={onPrepare}
-            />
-          ))}
-        </ul>
-      </>
-    );
-  }
-
-  return (
-    <Panel>
-      <PanelHeader title="Coverage gaps" />
-      <div className="max-h-[62vh] overflow-y-auto scroll-thin p-2">{body}</div>
-    </Panel>
-  );
-}
-
-function GapRow({
+export function GapRow({
   gap,
   rank,
   maxImp,
@@ -176,7 +100,7 @@ function GapRow({
   );
 }
 
-function Empty({
+export function Empty({
   children,
   tone,
   pulse,
