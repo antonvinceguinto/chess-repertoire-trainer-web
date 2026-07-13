@@ -24,6 +24,7 @@ export function FixPanel({ evaluation, status }: Props) {
     fixQueue,
     fixIndex,
     fixAddMove,
+    prevFix,
     skipFix,
     endFix,
   } = useTrainer();
@@ -47,9 +48,14 @@ export function FixPanel({ evaluation, status }: Props) {
             updated — reopen the Coverage tab to see how much closer to 100%
             you are.
           </p>
-          <Button variant="primary" onClick={endFix} className="mt-4">
-            Done
-          </Button>
+          <div className="mt-4 flex items-center justify-center gap-2">
+            <Button variant="secondary" onClick={prevFix}>
+              ← Back
+            </Button>
+            <Button variant="primary" onClick={endFix}>
+              Done
+            </Button>
+          </div>
         </div>
       </Panel>
     );
@@ -172,7 +178,15 @@ export function FixPanel({ evaluation, status }: Props) {
         )}
 
         <div className="flex items-center gap-2 border-t border-slate-800 pt-3">
-          <Button variant="secondary" onClick={skipFix}>
+          <Button
+            variant="secondary"
+            onClick={prevFix}
+            disabled={fixIndex === 0}
+            title="Previous gap (←)"
+          >
+            ← Prev
+          </Button>
+          <Button variant="secondary" onClick={skipFix} title="Next gap (→)">
             Skip →
           </Button>
           <Button variant="ghost" onClick={endFix} className="ml-auto">

@@ -54,6 +54,8 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     goBack,
     goForward,
     goEnd,
+    prevFix,
+    nextFix,
     flipBoard,
     resetBoard,
   } = t;
@@ -141,7 +143,14 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
         flipBoard();
         return;
       }
-      if (navLocked) return; // keep the board pinned to the gap during a fix
+      // During a fix the board is pinned to each gap, so left/right walk the gap
+      // queue (previous / next) rather than the moves of a single line.
+      if (fixQueue !== null) {
+        if (e.key === "ArrowLeft") prevFix();
+        else if (e.key === "ArrowRight") nextFix();
+        return;
+      }
+      if (navLocked) return; // keep the board pinned during training
       if (e.key === "ArrowLeft") goBack();
       else if (e.key === "ArrowRight") goForward();
       else if (e.key === "ArrowUp") goStart();
@@ -149,7 +158,7 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, navLocked, goBack, goForward, goStart, goEnd, flipBoard]);
+  }, [mode, navLocked, fixQueue, prevFix, nextFix, goBack, goForward, goStart, goEnd, flipBoard]);
 
   const userChar = session ? (session.color === "white" ? "w" : "b") : null;
 
