@@ -107,8 +107,12 @@ export function ChessTrainer() {
     startFix([sans]);
   };
 
+  // The opening book sits in its own left column while building; during
+  // training / gap-fixing the board takes over that space.
+  const showBook = mode === "build" && !fixQueue;
+
   return (
-    <div className="mx-auto min-h-screen w-full max-w-[1400px] px-3 py-4 sm:px-5">
+    <div className="mx-auto min-h-screen w-full max-w-[1760px] px-3 py-4 sm:px-5">
       <Header
         mode={mode}
         canTrain={!!activeRepertoire}
@@ -116,9 +120,22 @@ export function ChessTrainer() {
         onTrain={() => startTraining(trainableLines)}
       />
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,1fr)_minmax(360px,440px)]">
-        {/* Left: board */}
-        <div className="mx-auto w-fit max-w-full lg:mx-0">
+      <div
+        className={`mt-4 grid grid-cols-1 gap-4 ${
+          showBook
+            ? "xl:grid-cols-[minmax(300px,340px)_minmax(0,1fr)_minmax(360px,440px)]"
+            : "lg:grid-cols-[minmax(320px,1fr)_minmax(360px,440px)]"
+        }`}
+      >
+        {/* Left column: opening book (build mode only) */}
+        {showBook && (
+          <aside className="order-3 xl:order-1">
+            <BookPanel evaluation={evaluation} />
+          </aside>
+        )}
+
+        {/* Centre: board */}
+        <div className="order-1 flex max-w-full justify-center xl:order-2">
           <BoardPanel
             evaluation={evaluation}
             engineStatus={status}
@@ -126,8 +143,8 @@ export function ChessTrainer() {
           />
         </div>
 
-        {/* Right: panels */}
-        <div className="flex flex-col gap-3">
+        {/* Right column: panels */}
+        <div className="order-2 flex flex-col gap-3 xl:order-3">
           <RepertoireSelect />
 
           {mode === "train" ? (
@@ -164,17 +181,14 @@ export function ChessTrainer() {
               </div>
 
               {tab === "analysis" && (
-                <>
-                  <EnginePanel
-                    evaluation={evaluation}
-                    status={status}
-                    engineOn={engineOn}
-                    setEngineOn={setEngineOn}
-                    multipv={multipv}
-                    setMultipv={setMultipv}
-                  />
-                  <BookPanel evaluation={evaluation} />
-                </>
+                <EnginePanel
+                  evaluation={evaluation}
+                  status={status}
+                  engineOn={engineOn}
+                  setEngineOn={setEngineOn}
+                  multipv={multipv}
+                  setMultipv={setMultipv}
+                />
               )}
 
               {tab === "repertoire" && <RepertoirePanel />}

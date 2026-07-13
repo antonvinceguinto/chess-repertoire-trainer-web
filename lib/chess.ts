@@ -1,4 +1,4 @@
-import { Chess, type Move } from "chess.js";
+import { Chess, type Move, type Square } from "chess.js";
 import type { LineMove, RepNode, Turn } from "./types";
 
 export const START_FEN =
@@ -99,6 +99,78 @@ export function nodeToLineMove(node: RepNode): LineMove {
     to: node.to,
     fen: node.fen,
     color: turnOf(node.fen) === "w" ? "b" : "w",
+  };
+}
+
+/** English ordinal for a positive integer: 1→"1st", 2→"2nd", 3→"3rd", 11→"11th". */
+export function ordinal(n: number): string {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
+}
+
+/** Light/dark colour of a board square, from its coordinates (a1 is dark). */
+export function squareColorOf(square: string): "light" | "dark" {
+  const file = square.charCodeAt(0) - 97; // "a" → 0
+  const rank = Number(square[1]) - 1; // "1" → 0
+  return (file + rank) % 2 === 0 ? "dark" : "light";
+}
+
+export interface PieceInfo {
+  type: string;
+  color: Turn;
+}
+
+/**
+ * A chess.js instance bound to one FEN, exposing read-only position queries
+ * (piece lookup, attackers/defenders, castling rights). Build once per position
+ * and reuse — this keeps chess.js instantiation inside this module, matching the
+ * repo convention that all chess logic flows through `lib/chess.ts`.
+ */
+export interface BoardQuery {
+  /** The piece on a square, or null if empty. */
+  get(square: string): PieceInfo | null;
+  /** Squares of `color` pieces that attack (or defend) `square`. */
+  attackers(square: string, color: Turn): string[];
+  /** Every piece of `color`, as `{ square, type }`. */
+  piecesOf(color: Turn): { square: string; type: string }[];
+  /** Remaining castling rights for `color`. */
+  castling(color: Turn): { k: boolean; q: boolean };
+}
+
+export function queryBoard(fen: string): BoardQuery {
+  const chess = new Chess(fen);
+  return {
+    get(square) {
+      const p = chess.get(square as Square);
+      return p ? { type: p.type, color: p.color as Turn } : null;
+    },
+    attackers(square, color) {
+      return chess.attackers(square as Square, color) as string[];
+    },
+    piecesOf(color) {
+      const out: { square: string; type: string }[] = [];
+      for (const row of chess.board()) {
+        for (const cell of row) {
+          if (cell && cell.color === color) {
+            out.push({ square: cell.square, type: cell.type });
+          }
+        }
+      }
+      return out;
+    },
+    castling(color) {
+      return chess.getCastlingRights(color) as { k: boolean; q: boolean };
+    },
   };
 }
 

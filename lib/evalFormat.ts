@@ -1,5 +1,10 @@
 import type { EngineLine } from "./types";
 
+/** Score from the side-to-move's perspective (positive = good for the mover). */
+export function relScore(line: Pick<EngineLine, "scoreWhite">, whiteToMove: boolean): number {
+  return whiteToMove ? line.scoreWhite : -line.scoreWhite;
+}
+
 /** Format an engine line's score from White's perspective, e.g. "+1.35", "-0.42", "M5", "-M3". */
 export function formatScore(line: Pick<EngineLine, "type" | "value" | "scoreWhite">): string {
   if (line.type === "mate") {
