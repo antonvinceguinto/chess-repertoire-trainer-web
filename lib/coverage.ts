@@ -3,6 +3,20 @@ import type { Book } from "./book";
 import { START_FEN, turnOf } from "./chess";
 import { rankGaps, type Gap } from "./gaps";
 
+/**
+ * A decision point you've already answered — replayable exactly like a gap.
+ * The `path` ends on the opponent's reply, so pinning there lands on your move.
+ */
+export interface AnsweredLine {
+  /** Moves up to and including the opponent reply; pin here to replay (your move next). */
+  path: string[];
+  eco: string | null;
+  name: string | null;
+  importance: number;
+  /** Your prepared answer move(s) at this position. */
+  answers: string[];
+}
+
 /** How completely a single opening family is prepared against. */
 export interface OpeningProgress {
   /** Family name, e.g. "Nimzo-Indian Defense" (the part before any ":"). */
@@ -21,6 +35,8 @@ export interface OpeningProgress {
   reach: number;
   /** The specific open items within this opening, ranked by importance. */
   gaps: Gap[];
+  /** Lines you've already answered here (tap to replay), ranked by importance. */
+  answered: AnsweredLine[];
 }
 
 const keyOf = (fen: string) => fen.split(" ").slice(0, 4).join(" ");
@@ -49,6 +65,7 @@ interface Acc {
   /** fen|san keys already counted, so transpositions don't double-count. */
   seen: Set<string>;
   gaps: Gap[];
+  answered: AnsweredLine[];
 }
 
 /**
@@ -70,7 +87,7 @@ export function openingProgress(
   const acc = (family: string, eco: string | null): Acc => {
     let a = fams.get(family);
     if (!a) {
-      a = { eco: new Map(), covered: 0, open: 0, reach: 0, seen: new Set(), gaps: [] };
+      a = { eco: new Map(), covered: 0, open: 0, reach: 0, seen: new Set(), gaps: [], answered: [] };
       fams.set(family, a);
     }
     if (eco) a.eco.set(eco, (a.eco.get(eco) ?? 0) + 1);
@@ -108,6 +125,16 @@ export function openingProgress(
             a.seen.add(dk);
             if (child) {
               a.covered += 1;
+              // You've answered this reply — record it so it can be replayed.
+              if (child.children.length > 0) {
+                a.answered.push({
+                  path: [...sans, san],
+                  eco: lab?.eco ?? null,
+                  name: lab?.name ?? null,
+                  importance: w,
+                  answers: child.children.map((c) => c.san),
+                });
+              }
             } else {
               a.open += 1;
               a.gaps.push({
@@ -187,6 +214,7 @@ export function openingProgress(
       // Show every open item so the expanded list matches the "N to close"
       // count. (Gaps were already thresholded above, so no minImportance here.)
       gaps: rankGaps(a.gaps, Math.max(60, a.open)),
+      answered: a.answered.sort((x, y) => y.importance - x.importance),
     });
   }
 

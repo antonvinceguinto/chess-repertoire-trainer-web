@@ -1,6 +1,7 @@
 "use client";
 
 import { START_FEN, formatMoveSequence } from "@/lib/chess";
+import type { AnsweredLine } from "@/lib/coverage";
 import { DANGER_META, type DangerScore } from "@/lib/danger";
 import type { Gap } from "@/lib/gaps";
 
@@ -107,6 +108,57 @@ export function GapRow({
           </div>
           <span className="text-[10px] text-emerald-400 opacity-100 transition hoverable:opacity-0 hoverable:group-hover:opacity-100">
             Fix →
+          </span>
+        </div>
+      </button>
+    </li>
+  );
+}
+
+/**
+ * A line you've already answered. Tapping it replays the moves and pins the
+ * board on your move — the same guided flow as a gap — so you can review or
+ * add another response.
+ */
+export function AnsweredRow({
+  line,
+  onReplay,
+}: {
+  line: AnsweredLine;
+  onReplay: (path: string[]) => void;
+}) {
+  const seq = formatMoveSequence(START_FEN, line.path);
+  const title = line.name ?? "Answered line";
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onReplay(line.path)}
+        className="group w-full rounded-md border border-slate-800 bg-slate-900/30 px-2.5 py-2 text-left transition hover:border-sky-600/50 hover:bg-slate-800/60"
+      >
+        <div className="flex items-center gap-2">
+          <span className="shrink-0 text-[10px] font-semibold text-emerald-300">
+            ✓
+          </span>
+          {line.eco && (
+            <span className="shrink-0 font-mono text-[10px] text-slate-500">
+              {line.eco}
+            </span>
+          )}
+          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-200">
+            {title}
+          </span>
+          <span className="shrink-0 text-[10px] text-sky-400 opacity-100 transition hoverable:opacity-0 hoverable:group-hover:opacity-100">
+            Replay →
+          </span>
+        </div>
+
+        <div className="mt-1 font-mono text-[11px] text-slate-500">
+          {seq}{" "}
+          <span className="text-slate-600">→ you play </span>
+          <span className="font-semibold text-emerald-300">
+            {line.answers.join(" / ")}
           </span>
         </div>
       </button>
