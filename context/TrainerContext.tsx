@@ -96,6 +96,8 @@ interface TrainerContextValue {
   fixIndex: number;
   startFix: (paths: string[][]) => void;
   fixAddMove: (san: string) => void;
+  prevFix: () => void;
+  nextFix: () => void;
   skipFix: () => void;
   endFix: () => void;
 }
@@ -616,18 +618,27 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     [stopAnimation, loadLineSans],
   );
 
-  const advanceFix = useCallback(
-    (from: number) => {
-      const next = from + 1;
-      setFixIndex(next);
-      if (fixQueue && next < fixQueue.length) {
-        loadLineSans(fixQueue[next]);
+  // Jump to a specific gap in the queue. The index is clamped to the queue; an
+  // index at (or past) the end lands on the "caught up" screen with a cleared
+  // board. Each valid gap reloads its position so the board is pinned there.
+  const goFix = useCallback(
+    (index: number) => {
+      if (!fixQueue) return;
+      const clamped = Math.max(0, Math.min(fixQueue.length, index));
+      setFixIndex(clamped);
+      if (clamped < fixQueue.length) {
+        loadLineSans(fixQueue[clamped]);
       } else {
         setLine([]);
         setPly(0);
       }
     },
     [fixQueue, loadLineSans],
+  );
+
+  const advanceFix = useCallback(
+    (from: number) => goFix(from + 1),
+    [goFix],
   );
 
   // Save a reply at the current gap (the board is pinned there), then advance.
@@ -653,6 +664,11 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   // Expose the current save handler to playMove (null unless actively fixing).
   fixSaveRef.current =
     fixQueue !== null && fixIndex < fixQueue.length ? fixSaveReply : null;
+
+  // Walk the queue without saving — step back to review/redo an earlier gap, or
+  // step forward to the next one (equivalent to skipping the current gap).
+  const prevFix = useCallback(() => goFix(fixIndex - 1), [goFix, fixIndex]);
+  const nextFix = useCallback(() => goFix(fixIndex + 1), [goFix, fixIndex]);
 
   const skipFix = useCallback(() => advanceFix(fixIndex), [advanceFix, fixIndex]);
 
@@ -708,6 +724,8 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     fixIndex,
     startFix,
     fixAddMove,
+    prevFix,
+    nextFix,
     skipFix,
     endFix,
   };
