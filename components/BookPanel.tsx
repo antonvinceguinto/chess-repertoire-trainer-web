@@ -12,9 +12,10 @@ import { Panel, PanelHeader, WdlBar } from "./ui";
 
 interface Props {
   evaluation: EngineEval | null;
+  onHide?: () => void;
 }
 
-export function BookPanel({ evaluation }: Props) {
+export function BookPanel({ evaluation, onHide }: Props) {
   const { fen, mode, currentSans, activeRepertoire, playMove, addMoveToRepertoire } =
     useTrainer();
   const { ready, error, opening, moves } = useBook(fen);
@@ -44,10 +45,22 @@ export function BookPanel({ evaluation }: Props) {
       <PanelHeader
         title="Opening book"
         right={
-          <label className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            Live win-rates
-            <Toggle checked={liveOn} onChange={setLiveOn} />
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              Live win-rates
+              <Toggle checked={liveOn} onChange={setLiveOn} />
+            </label>
+            {onHide && (
+              <button
+                type="button"
+                onClick={onHide}
+                className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+                title="Hide the opening book to widen the board"
+              >
+                Hide
+              </button>
+            )}
+          </div>
         }
       />
       <div className="p-2">

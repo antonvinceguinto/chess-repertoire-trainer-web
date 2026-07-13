@@ -43,6 +43,7 @@ export function ChessTrainer() {
   const [thoroughness, setThoroughness] = useState<Thoroughness>(
     DEFAULT_THOROUGHNESS,
   );
+  const [bookHidden, setBookHidden] = useState(false);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(THOROUGHNESS_KEY);
@@ -109,7 +110,8 @@ export function ChessTrainer() {
 
   // The opening book sits in its own left column while building; during
   // training / gap-fixing the board takes over that space.
-  const showBook = mode === "build" && !fixQueue;
+  const buildBoard = mode === "build" && !fixQueue;
+  const showBook = buildBoard && !bookHidden;
 
   return (
     <div className="mx-auto min-h-screen w-full max-w-[1760px] px-3 py-4 sm:px-5">
@@ -130,12 +132,27 @@ export function ChessTrainer() {
         {/* Left column: opening book (build mode only) */}
         {showBook && (
           <aside className="order-3 xl:order-1">
-            <BookPanel evaluation={evaluation} />
+            <BookPanel
+              evaluation={evaluation}
+              onHide={() => setBookHidden(true)}
+            />
           </aside>
         )}
 
         {/* Centre: board */}
-        <div className="order-1 flex max-w-full justify-center xl:order-2">
+        <div className="order-1 flex max-w-full flex-col items-center xl:order-2">
+          {buildBoard && bookHidden && (
+            <div className="mb-2 flex w-full justify-start">
+              <button
+                type="button"
+                onClick={() => setBookHidden(false)}
+                className="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-xs font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white"
+                title="Show the opening book"
+              >
+                ← Show opening book
+              </button>
+            </div>
+          )}
           <BoardPanel
             evaluation={evaluation}
             engineStatus={status}
