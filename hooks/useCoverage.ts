@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { loadBook, type Book } from "@/lib/book";
-import { findGaps, rankGaps, type Gap } from "@/lib/gaps";
+import { rankGaps, type Gap } from "@/lib/gaps";
 import { openingProgress, type OpeningProgress } from "@/lib/coverage";
 import type { Repertoire } from "@/lib/types";
 
@@ -33,13 +33,16 @@ export function useCoverage(
     };
   }, []);
 
-  const gaps = useMemo(
-    () => (rep && book ? rankGaps(findGaps(rep, book), 40, minImportance) : []),
-    [rep, book, minImportance],
-  );
   const progress = useMemo(
     () => (rep && book ? openingProgress(rep, book, minImportance) : []),
     [rep, book, minImportance],
+  );
+  // Derive the flat gap list from the same per-opening walk, so the "All gaps"
+  // list and the "By opening" covered/open counts can never disagree (e.g. on a
+  // transposition answered via one move order but not another).
+  const gaps = useMemo(
+    () => rankGaps(progress.flatMap((p) => p.gaps), 40, minImportance),
+    [progress, minImportance],
   );
 
   return { ready: !!book, error, gaps, progress };

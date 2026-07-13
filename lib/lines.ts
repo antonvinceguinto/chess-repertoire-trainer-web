@@ -1,5 +1,52 @@
 import { openingNameFrom, type Book } from "./book";
+import { START_FEN, turnOf } from "./chess";
 import type { Repertoire, RepNode } from "./types";
+
+const posKey = (fen: string) => fen.split(" ").slice(0, 4).join(" ");
+
+/**
+ * Root-to-leaf lines whose reach — the chance a book-following opponent
+ * actually plays into them (product of their move-shares along the way) — is at
+ * least `minImportance`. Lets Train focus on the lines you'll really meet at a
+ * given thoroughness. Falls back to every line if the filter leaves nothing.
+ */
+export function importantLines(
+  rep: Repertoire,
+  book: Book,
+  minImportance: number,
+): string[][] {
+  const userChar = rep.color === "white" ? "w" : "b";
+  const all: string[][] = [];
+  const kept: string[][] = [];
+
+  const walk = (
+    nodes: RepNode[],
+    fen: string,
+    sans: string[],
+    reach: number,
+  ) => {
+    const side = turnOf(fen);
+    const bookMoves = side !== userChar ? book.moves[posKey(fen)] ?? [] : [];
+    const total = bookMoves.reduce((sum, m) => sum + m[1], 0) || 1;
+    for (const node of nodes) {
+      let childReach = reach;
+      if (side !== userChar) {
+        const entry = bookMoves.find((m) => m[0] === node.san);
+        childReach = reach * (entry ? entry[1] / total : 1 / (total + 1));
+      }
+      const next = [...sans, node.san];
+      if (node.children.length === 0) {
+        all.push(next);
+        if (childReach >= minImportance) kept.push(next);
+      } else {
+        walk(node.children, node.fen, next, childReach);
+      }
+    }
+  };
+
+  walk(rep.root, START_FEN, [], 1);
+  return kept.length > 0 ? kept : all;
+}
 
 /** A complete root-to-leaf repertoire line, tagged with its opening name. */
 export interface NamedLine {

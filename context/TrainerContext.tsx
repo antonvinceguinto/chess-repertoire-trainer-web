@@ -26,7 +26,6 @@ import {
 } from "@/lib/chess";
 import {
   addLine,
-  enumerateLines,
   loadActiveId,
   loadRepertoires,
   newRepertoire,
@@ -84,7 +83,8 @@ interface TrainerContextValue {
 
   // Training
   setMode: (m: Mode) => void;
-  startTraining: () => void;
+  startTraining: (lines: string[][]) => void;
+  reshuffleTraining: () => void;
   stopTraining: () => void;
   revealAnswer: () => void;
   restartLine: () => void;
@@ -138,6 +138,9 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   // Guided gap-fixing: a queue of gap positions to walk through and answer.
   const [fixQueue, setFixQueue] = useState<string[][] | null>(null);
   const [fixIndex, setFixIndex] = useState(0);
+  // Latest "save this reply & advance" handler, or null when not fixing — lets
+  // playMove (defined earlier) route a board move through the fix flow.
+  const fixSaveRef = useRef<((mv: LineMove) => void) | null>(null);
 
   const fen = fenAtPly(line, ply);
   const turn = turnOf(fen);
@@ -281,6 +284,12 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       const mv = tryMove(fen, input);
       if (!mv) return false;
       if (mode === "train") return handleTrainMove(mv);
+      // During a guided fix the board is pinned to the gap, so a board move is
+      // your reply: save it and advance, like tapping a suggested move.
+      if (fixSaveRef.current) {
+        fixSaveRef.current(mv);
+        return true;
+      }
       advanceWith(mv);
       return true;
     },
@@ -358,11 +367,13 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     setRepertoires((prev) => [...prev, rep]);
     setActiveId(rep.id);
     setOrientation(color);
+    setFixQueue(null); // a fix queue for another repertoire must not carry over
     setLine([]);
     setPly(0);
   }, []);
 
   const deleteRepertoire = useCallback((id: string) => {
+    setFixQueue(null);
     setRepertoires((prev) => {
       const next = prev.filter((r) => r.id !== id);
       setActiveId((curr) => (curr === id ? next[0]?.id ?? null : curr));
@@ -398,6 +409,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       stopAnimation();
       setModeState("build");
       setSession(null);
+      setFixQueue(null);
       setLine([]);
       setPly(0);
 
@@ -472,35 +484,64 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     [stopAnimation],
   );
 
-  const startTraining = useCallback(() => {
-    const rep = activeRepertoire;
-    if (!rep) return;
-    stopAnimation();
-    setFixQueue(null);
-    // Random order, but a full shuffled pass covers every line before any repeat.
-    const lines = shuffle(enumerateLines(rep));
+  // `lineSans` is the (thoroughness-filtered) set of lines to drill; the caller
+  // decides which lines belong to the chosen level.
+  const startTraining = useCallback(
+    (lineSans: string[][]) => {
+      const rep = activeRepertoire;
+      if (!rep) return;
+      stopAnimation();
+      setFixQueue(null);
+      // Random order, but a full shuffled pass covers every line before a repeat.
+      const lines = shuffle(lineSans);
+      setLine([]);
+      setPly(0);
+      setOrientation(rep.color);
+      setModeState("train");
+      setSession({
+        repId: rep.id,
+        color: rep.color,
+        status: lines.length === 0 ? "empty" : "playing",
+        correct: 0,
+        mistakes: 0,
+        lastWrong: null,
+        revealed: false,
+        lines,
+        lineIndex: 0,
+      });
+    },
+    [activeRepertoire, stopAnimation],
+  );
+
+  // Fresh random pass over the current session's lines (no re-filtering needed).
+  const reshuffleTraining = useCallback(() => {
     setLine([]);
     setPly(0);
-    setOrientation(rep.color);
-    setModeState("train");
-    setSession({
-      repId: rep.id,
-      color: rep.color,
-      status: lines.length === 0 ? "empty" : "playing",
-      correct: 0,
-      mistakes: 0,
-      lastWrong: null,
-      revealed: false,
-      lines,
-      lineIndex: 0,
-    });
-  }, [activeRepertoire, stopAnimation]);
+    setSession((s) =>
+      s && s.lines.length > 0
+        ? {
+            ...s,
+            lines: shuffle(s.lines),
+            lineIndex: 0,
+            status: "playing",
+            lastWrong: null,
+            revealed: false,
+          }
+        : s,
+    );
+  }, []);
 
   const stopTraining = useCallback(() => {
     stopAnimation();
     setModeState("build");
     setSession(null);
   }, [stopAnimation]);
+
+  // Switching, creating, or deleting the active repertoire mid-drill would leave
+  // the session bound to the old one — drop out of training when they diverge.
+  useEffect(() => {
+    if (session && activeId !== session.repId) stopTraining();
+  }, [activeId, session, stopTraining]);
 
   const revealAnswer = useCallback(() => {
     setSession((s) => (s ? { ...s, revealed: true } : s));
@@ -589,18 +630,29 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     [fixQueue, loadLineSans],
   );
 
-  // Save the chosen response at the current gap, then advance to the next.
-  const fixAddMove = useCallback(
-    (san: string) => {
+  // Save a reply at the current gap (the board is pinned there), then advance.
+  const fixSaveReply = useCallback(
+    (mv: LineMove) => {
       const rep = activeRepertoire;
       if (!rep) return;
-      const mv = tryMove(fen, san);
-      if (!mv) return;
       updateRepertoire(rep.id, (r) => addLine(r, [...line.slice(0, ply), mv]));
       advanceFix(fixIndex);
     },
-    [activeRepertoire, fen, line, ply, updateRepertoire, advanceFix, fixIndex],
+    [activeRepertoire, line, ply, updateRepertoire, advanceFix, fixIndex],
   );
+
+  // Save the chosen suggested response, then advance to the next gap.
+  const fixAddMove = useCallback(
+    (san: string) => {
+      const mv = tryMove(fen, san);
+      if (mv) fixSaveReply(mv);
+    },
+    [fen, fixSaveReply],
+  );
+
+  // Expose the current save handler to playMove (null unless actively fixing).
+  fixSaveRef.current =
+    fixQueue !== null && fixIndex < fixQueue.length ? fixSaveReply : null;
 
   const skipFix = useCallback(() => advanceFix(fixIndex), [advanceFix, fixIndex]);
 
@@ -646,6 +698,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     setLineComment,
     setMode,
     startTraining,
+    reshuffleTraining,
     stopTraining,
     revealAnswer,
     restartLine,

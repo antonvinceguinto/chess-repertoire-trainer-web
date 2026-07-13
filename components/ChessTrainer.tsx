@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTrainer } from "@/context/TrainerContext";
 import { useEngine } from "@/hooks/useEngine";
 import { useCoverage } from "@/hooks/useCoverage";
+import { useBookData } from "@/hooks/useBookData";
+import { importantLines } from "@/lib/lines";
+import { enumerateLines } from "@/lib/repertoire";
 import {
   DEFAULT_THOROUGHNESS,
   minImportanceFor,
@@ -33,6 +36,7 @@ export function ChessTrainer() {
     fixQueue,
     startFix,
   } = useTrainer();
+  const book = useBookData();
 
   const [engineOn, setEngineOn] = useState(true);
   const [multipv, setMultipv] = useState(3);
@@ -57,6 +61,36 @@ export function ChessTrainer() {
     }
   };
 
+  // The lines Train drills at the chosen level (all lines until the book loads).
+  const linesFor = (level: Thoroughness) =>
+    activeRepertoire
+      ? book
+        ? importantLines(activeRepertoire, book, minImportanceFor(level))
+        : enumerateLines(activeRepertoire)
+      : [];
+  const trainableLines = useMemo(
+    () => linesFor(thoroughness),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeRepertoire, book, thoroughness],
+  );
+
+  // Changing the level while training restarts the drill with the new set.
+  const changeTrainLevel = (level: Thoroughness) => {
+    changeThoroughness(level);
+    if (mode === "train") startTraining(linesFor(level));
+  };
+
+  // If training was started before the book loaded (so it fell back to all
+  // lines), re-derive the level-filtered set once the book arrives.
+  const bookSyncedRef = useRef(false);
+  useEffect(() => {
+    if (!book || bookSyncedRef.current) return;
+    bookSyncedRef.current = true;
+    if (mode === "train") startTraining(linesFor(thoroughness));
+    // Fire once, on the book's first load, using the values current at that moment.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [book]);
+
   // Keep the engine running while fixing gaps even if the user turned it off,
   // so the recommended reply always has an eval.
   const engineEnabled = (engineOn || !!fixQueue) && mode === "build";
@@ -79,7 +113,7 @@ export function ChessTrainer() {
         mode={mode}
         canTrain={!!activeRepertoire}
         onBuild={stopTraining}
-        onTrain={startTraining}
+        onTrain={() => startTraining(trainableLines)}
       />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,1fr)_minmax(360px,440px)]">
@@ -97,7 +131,10 @@ export function ChessTrainer() {
           <RepertoireSelect />
 
           {mode === "train" ? (
-            <TrainPanel />
+            <TrainPanel
+              level={thoroughness}
+              onLevelChange={changeTrainLevel}
+            />
           ) : fixQueue ? (
             <FixPanel evaluation={evaluation} status={status} />
           ) : (

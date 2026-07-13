@@ -1,11 +1,18 @@
 "use client";
 
 import { useTrainer } from "@/context/TrainerContext";
-import { childrenAt } from "@/lib/repertoire";
+import { childrenAt, countLines } from "@/lib/repertoire";
 import { START_FEN, formatMoveSequence } from "@/lib/chess";
+import { THOROUGHNESS_LEVELS, type Thoroughness } from "@/lib/thoroughness";
 import { Button, Panel } from "./ui";
 
-export function TrainPanel() {
+export function TrainPanel({
+  level,
+  onLevelChange,
+}: {
+  level: Thoroughness;
+  onLevelChange: (level: Thoroughness) => void;
+}) {
   const {
     session,
     turn,
@@ -17,7 +24,7 @@ export function TrainPanel() {
     nextTrainingLine,
     prevTrainingLine,
     stopTraining,
-    startTraining,
+    reshuffleTraining,
   } = useTrainer();
 
   if (!session || !activeRepertoire) return null;
@@ -26,6 +33,7 @@ export function TrainPanel() {
   const yourTurn = turn === userChar;
   const sequence = formatMoveSequence(START_FEN, currentSans);
   const totalLines = session.lines.length;
+  const repertoireLines = countLines(activeRepertoire);
   const targetLine = session.lines[session.lineIndex];
   const expected = targetLine?.[ply] ?? null;
 
@@ -102,6 +110,34 @@ export function TrainPanel() {
             <div className="text-[10px] uppercase text-slate-500">missed</div>
           </div>
         </div>
+      </div>
+
+      {/* Thoroughness — how many of your lines to drill */}
+      <div className="mb-3 flex items-center gap-2">
+        <span className="shrink-0 text-[11px] text-slate-500">Drill</span>
+        <div className="flex flex-1 rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[11px]">
+          {THOROUGHNESS_LEVELS.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => onLevelChange(l.id)}
+              title={l.blurb}
+              className={`flex-1 rounded px-2 py-0.5 font-medium transition ${
+                level === l.id
+                  ? "bg-slate-700 text-white"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+        <span
+          className="shrink-0 text-[11px] tabular-nums text-slate-500"
+          title="Lines being drilled at this level, out of your whole repertoire"
+        >
+          {totalLines}/{repertoireLines}
+        </span>
       </div>
 
       {/* Line progress */}
@@ -197,7 +233,7 @@ export function TrainPanel() {
       <div className="mt-3 flex items-center gap-2">
         <button
           type="button"
-          onClick={startTraining}
+          onClick={reshuffleTraining}
           className="text-[11px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
         >
           🔀 Reshuffle &amp; restart
@@ -208,10 +244,13 @@ export function TrainPanel() {
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
-        Lines are drilled in a random order — every line comes up once before any
-        repeats. The app plays the opponent&apos;s moves while you recall yours;
-        once you&apos;ve finished the whole repertoire it reshuffles for a fresh
-        pass.
+        Drilling {totalLines} of {repertoireLines} line
+        {repertoireLines === 1 ? "" : "s"} in random order — every line comes up
+        once before any repeats.{" "}
+        {totalLines < repertoireLines
+          ? "Raise the level to add rarer lines."
+          : "That's your whole repertoire."}{" "}
+        Finish the set and it reshuffles for a fresh pass.
       </p>
     </Panel>
   );

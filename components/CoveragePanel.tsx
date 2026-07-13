@@ -94,6 +94,7 @@ export function CoveragePanel({
           dangerScores={danger.scores}
           dangerDone={danger.done}
           dangerTotal={danger.total}
+          dangerFailed={danger.failed}
         />
       );
   }
@@ -345,6 +346,7 @@ function AllGapsView({
   dangerScores,
   dangerDone,
   dangerTotal,
+  dangerFailed,
 }: {
   gaps: Gap[];
   onPrepare: (sans: string[]) => void;
@@ -354,6 +356,7 @@ function AllGapsView({
   dangerScores: Map<string, DangerScore>;
   dangerDone: number;
   dangerTotal: number;
+  dangerFailed: boolean;
 }) {
   const maxImp = gaps[0].importance || 1;
   const defenses = gaps.filter((g) => g.kind === "defense").length;
@@ -402,11 +405,18 @@ function AllGapsView({
           ⚠ By danger
         </button>
       </div>
-      {dangerOn && dangerDone < dangerTotal && (
-        <p className="animate-soft-pulse px-1 pb-2 text-[10px] text-slate-500">
-          Scoring danger with Stockfish… {dangerDone}/{dangerTotal}
-        </p>
-      )}
+      {dangerOn &&
+        (dangerFailed ? (
+          <p className="px-1 pb-2 text-[10px] text-rose-400">
+            Couldn&apos;t score danger — the engine is unavailable.
+          </p>
+        ) : (
+          dangerDone < dangerTotal && (
+            <p className="animate-soft-pulse px-1 pb-2 text-[10px] text-slate-500">
+              Scoring danger with Stockfish… {dangerDone}/{dangerTotal}
+            </p>
+          )
+        ))}
       <Button
         variant="primary"
         onClick={() => onStartFix(ordered.map(gapPath))}

@@ -48,6 +48,7 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     mode,
     turn,
     session,
+    fixQueue,
     playMove,
     goStart,
     goBack,
@@ -56,6 +57,9 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     flipBoard,
     resetBoard,
   } = t;
+
+  // While guiding a gap fix, the board must stay on the gap position.
+  const navLocked = mode === "train" || fixQueue !== null;
 
   const evalMatches = evaluation != null && evaluation.fen === fen;
   const bestLine = evalMatches && evaluation.lines.length > 0 ? evaluation.lines[0] : null;
@@ -127,21 +131,25 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     window.addEventListener("pointerup", onUp);
   };
 
-  // Keyboard navigation (build mode only).
+  // Keyboard navigation (build mode only; not while a fix is locked to a gap).
   useEffect(() => {
     if (mode !== "build") return;
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement;
       if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
+      if (e.key === "f") {
+        flipBoard();
+        return;
+      }
+      if (navLocked) return; // keep the board pinned to the gap during a fix
       if (e.key === "ArrowLeft") goBack();
       else if (e.key === "ArrowRight") goForward();
       else if (e.key === "ArrowUp") goStart();
       else if (e.key === "ArrowDown") goEnd();
-      else if (e.key === "f") flipBoard();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, goBack, goForward, goStart, goEnd, flipBoard]);
+  }, [mode, navLocked, goBack, goForward, goStart, goEnd, flipBoard]);
 
   const userChar = session ? (session.color === "white" ? "w" : "b") : null;
 
@@ -327,23 +335,23 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <ControlButton onClick={goStart} disabled={mode === "train"} title="Start (↑)">
+        <ControlButton onClick={goStart} disabled={navLocked} title="Start (↑)">
           ⏮
         </ControlButton>
-        <ControlButton onClick={goBack} disabled={mode === "train"} title="Back (←)">
+        <ControlButton onClick={goBack} disabled={navLocked} title="Back (←)">
           ◀
         </ControlButton>
-        <ControlButton onClick={goForward} disabled={mode === "train"} title="Forward (→)">
+        <ControlButton onClick={goForward} disabled={navLocked} title="Forward (→)">
           ▶
         </ControlButton>
-        <ControlButton onClick={goEnd} disabled={mode === "train"} title="End (↓)">
+        <ControlButton onClick={goEnd} disabled={navLocked} title="End (↓)">
           ⏭
         </ControlButton>
         <div className="mx-1 h-5 w-px bg-slate-700" />
         <ControlButton onClick={flipBoard} title="Flip board (f)">
           ⇅ Flip
         </ControlButton>
-        <ControlButton onClick={resetBoard} disabled={mode === "train"} title="Reset to start">
+        <ControlButton onClick={resetBoard} disabled={navLocked} title="Reset to start">
           ↺ Reset
         </ControlButton>
 
