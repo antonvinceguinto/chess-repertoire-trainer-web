@@ -30,7 +30,6 @@ export function ChessTrainer() {
     fen,
     mode,
     activeRepertoire,
-    playLineSans,
     startTraining,
     stopTraining,
     fixQueue,
@@ -102,9 +101,10 @@ export function ChessTrainer() {
     error: gapsError,
   } = useCoverage(activeRepertoire, minImportanceFor(thoroughness));
 
+  // Tapping a single gap row reproduces it as a one-gap guided fix: the board
+  // pins to the position and the suggested replies are one tap from being saved.
   const prepareGap = (sans: string[]) => {
-    playLineSans(sans);
-    setTab("analysis");
+    startFix([sans]);
   };
 
   return (

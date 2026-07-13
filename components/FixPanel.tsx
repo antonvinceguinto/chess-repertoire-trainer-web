@@ -19,8 +19,10 @@ interface Props {
  */
 export function FixPanel({ evaluation, status }: Props) {
   const {
-    fen,
-    currentSans,
+    gapFen,
+    line,
+    ply,
+    animating,
     fixQueue,
     fixIndex,
     fixAddMove,
@@ -28,7 +30,9 @@ export function FixPanel({ evaluation, status }: Props) {
     skipFix,
     endFix,
   } = useTrainer();
-  const { ready, opening, moves: bookMoves } = useBook(fen);
+  // The board may scrub back to review, but the suggestions and eval always
+  // belong to the gap position (the end of the line).
+  const { ready, opening, moves: bookMoves } = useBook(gapFen);
 
   if (!fixQueue) return null;
   const total = fixQueue.length;
@@ -61,7 +65,7 @@ export function FixPanel({ evaluation, status }: Props) {
     );
   }
 
-  const evalMatches = evaluation != null && evaluation.fen === fen;
+  const evalMatches = evaluation != null && evaluation.fen === gapFen;
   const lines = evalMatches ? evaluation.lines : [];
   const engineBest = lines[0]?.san ?? null;
   const evalBySan = new Map(lines.map((l) => [l.san, l]));
@@ -77,7 +81,9 @@ export function FixPanel({ evaluation, status }: Props) {
     a.san === engineBest ? -1 : b.san === engineBest ? 1 : b.count - a.count,
   );
 
-  const seq = formatMoveSequence(START_FEN, currentSans);
+  const gapSans = line.map((m) => m.san);
+  const seq = formatMoveSequence(START_FEN, gapSans);
+  const reviewing = ply < line.length && !animating;
 
   return (
     <Panel>
@@ -117,6 +123,11 @@ export function FixPanel({ evaluation, status }: Props) {
           <p className="mt-1 text-[11px] text-slate-500">
             Your move — pick a reply to lock this line into your repertoire.
           </p>
+          {reviewing && (
+            <p className="mt-1 text-[11px] font-medium text-amber-400/90">
+              Reviewing an earlier move — press → to return to the gap.
+            </p>
+          )}
         </div>
 
         {!ready ? (

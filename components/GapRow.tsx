@@ -7,7 +7,7 @@ import type { Gap } from "@/lib/gaps";
 /**
  * Shared row/empty-state building blocks for the coverage views. A gap is one
  * opponent reply you haven't answered (or a line that stops on your move);
- * tapping the row loads it so you can prepare it.
+ * tapping the row starts a one-gap guided fix so you can answer it.
  */
 function commonness(imp: number): { label: string; cls: string } {
   if (imp >= 0.06) return { label: "Very common", cls: "text-rose-300" };
@@ -106,7 +106,7 @@ export function GapRow({
             />
           </div>
           <span className="text-[10px] text-emerald-400 opacity-100 transition hoverable:opacity-0 hoverable:group-hover:opacity-100">
-            Prepare →
+            Fix →
           </span>
         </div>
       </button>

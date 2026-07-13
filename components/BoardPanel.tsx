@@ -43,6 +43,7 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
   const {
     fen,
     ply,
+    line,
     orientation,
     lastMove,
     mode,
@@ -60,8 +61,14 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     resetBoard,
   } = t;
 
-  // While guiding a gap fix, the board must stay on the gap position.
+  // While guiding a gap fix, the board must stay on the gap position (no free
+  // play or reset). Stepping ←/→ through the line's moves to review it is still
+  // allowed — only training locks that out.
   const navLocked = mode === "train" || fixQueue !== null;
+  const moveNavLocked = mode === "train";
+  // The gap sits at the end of `line`; scrubbed back to review, you can't grab
+  // pieces until you step forward to the gap again.
+  const atGap = fixQueue === null || ply === line.length;
 
   const evalMatches = evaluation != null && evaluation.fen === fen;
   const bestLine = evalMatches && evaluation.lines.length > 0 ? evaluation.lines[0] : null;
@@ -143,11 +150,14 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
         flipBoard();
         return;
       }
-      // During a fix the board is pinned to each gap, so left/right walk the gap
-      // queue (previous / next) rather than the moves of a single line.
+      // During a fix the board is pinned to each gap. Left/right step through the
+      // moves that lead to the gap (to review how it arose); up/down walk the gap
+      // queue (previous / next).
       if (fixQueue !== null) {
-        if (e.key === "ArrowLeft") prevFix();
-        else if (e.key === "ArrowRight") nextFix();
+        if (e.key === "ArrowLeft") goBack();
+        else if (e.key === "ArrowRight") goForward();
+        else if (e.key === "ArrowUp") prevFix();
+        else if (e.key === "ArrowDown") nextFix();
         return;
       }
       if (navLocked) return; // keep the board pinned during training
@@ -238,9 +248,13 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       arrows,
       id: "trainer-board",
       canDragPiece: ({ piece }: { piece: { pieceType: string } }) => {
-        if (mode !== "train") return true;
-        if (!userChar) return false;
-        return piece.pieceType[0] === userChar && turn === userChar;
+        if (mode === "train") {
+          if (!userChar) return false;
+          return piece.pieceType[0] === userChar && turn === userChar;
+        }
+        // While fixing, you can only make your reply at the gap — not while
+        // reviewing an earlier move.
+        return atGap;
       },
       onPieceDrop: ({
         sourceSquare,
@@ -284,6 +298,7 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
         const pc = piece?.pieceType[0];
         const canSelect =
           pc != null &&
+          atGap &&
           (mode === "train"
             ? userChar != null && pc === userChar && turn === userChar
             : pc === turn);
@@ -302,6 +317,7 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       turn,
       playMove,
       moveFrom,
+      atGap,
     ],
   );
 
@@ -344,16 +360,16 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <ControlButton onClick={goStart} disabled={navLocked} title="Start (↑)">
+        <ControlButton onClick={goStart} disabled={moveNavLocked} title="Start (↑)">
           ⏮
         </ControlButton>
-        <ControlButton onClick={goBack} disabled={navLocked} title="Back (←)">
+        <ControlButton onClick={goBack} disabled={moveNavLocked} title="Back (←)">
           ◀
         </ControlButton>
-        <ControlButton onClick={goForward} disabled={navLocked} title="Forward (→)">
+        <ControlButton onClick={goForward} disabled={moveNavLocked} title="Forward (→)">
           ▶
         </ControlButton>
-        <ControlButton onClick={goEnd} disabled={navLocked} title="End (↓)">
+        <ControlButton onClick={goEnd} disabled={moveNavLocked} title="End (↓)">
           ⏭
         </ControlButton>
         <div className="mx-1 h-5 w-px bg-slate-700" />
