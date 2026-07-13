@@ -44,7 +44,7 @@ A repertoire is an immutable tree of `RepNode` (see `lib/types.ts`). `lib/repert
 
 ### Three knowledge sources
 
-1. **Stockfish 18 (WASM, in-browser)** — `lib/engine.ts` wraps the single-threaded "lite" worker under `public/stockfish/`, speaks UCI, tracks MultiPV lines, normalizes scores to White's perspective, and throttles emissions. `hooks/useEngine.ts` keeps one worker alive for the app's lifetime, re-analyzes on FEN change, and discards evals for stale positions.
+1. **Stockfish 18 (WASM, in-browser)** — `lib/engine.ts` wraps the single-threaded "lite" worker under `public/stockfish/`, speaks UCI, tracks MultiPV lines, normalizes scores to White's perspective, and throttles emissions. `hooks/useEngine.ts` runs the primary worker (one at a time, re-analyzed on FEN change, stale evals discarded). Note `hooks/useDanger.ts` spins up a *second, separate* `StockfishEngine` for background gap scoring — keep the two instances independent so they don't contend.
 2. **Bundled opening book** — `public/openings/book.json` (~900 KB), generated offline by `scripts/build-book.mjs` from Lichess opening TSVs. `lib/book.ts` fetches/caches it. Compact shape: a shared `names` table + `positions` map + `moves` map. It powers opening names, theory-move suggestions, and all coverage/gap analysis.
 3. **Lichess opening explorer (live API)** — `lib/explorer.ts` (`fetchExplorer`) pulls real game statistics; `hooks/useExplorer.ts` drives it. Handles 429 rate-limiting explicitly.
 
@@ -55,6 +55,8 @@ Everything that indexes positions (book, gaps, coverage, the book builder) keys 
 ### Coverage & gaps
 
 `lib/gaps.ts` (`findGaps`) walks the repertoire tree against the book to surface two gap kinds: a **"defense"** gap (a popular opponent reply you haven't answered) and a **"reply"** gap (a line that stops on your own move). `lib/coverage.ts` (`openingProgress`) does the same walk but aggregates covered-vs-open counts per opening family. Both weight each gap by an **`importance`** score — the estimated probability of reaching that exact position, computed by multiplying book move-shares along the path. `lib/thoroughness.ts` turns the Club/Tournament/Master levels into a `minImportance` cutoff that filters the noise.
+
+Optionally, **danger scoring** (`lib/danger.ts` + `hooks/useDanger.ts`) evaluates each gap's off-book position with the background engine and rates how costly being unprepared there is (Sharp / Tricky / Quiet), from how far behind you'd be and how "only-move" the best reply is. Results are cached by FEN for the session.
 
 ### Feature flows
 
