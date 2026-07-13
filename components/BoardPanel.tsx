@@ -20,9 +20,18 @@ interface Props {
   engineEnabled: boolean;
 }
 
-const LIGHT = "#edeed1";
-const DARK = "#7aa25c";
 const HIGHLIGHT = "rgba(250, 204, 21, 0.45)";
+
+/** Selectable board colour schemes (light / dark square colours). */
+const BOARD_THEMES = {
+  green: { label: "Green", light: "#edeed1", dark: "#7aa25c" },
+  brown: { label: "Brown", light: "#f0d9b5", dark: "#b58863" },
+  blue: { label: "Blue", light: "#e3ecf5", dark: "#5d84a8" },
+} as const;
+type BoardTheme = keyof typeof BOARD_THEMES;
+const BOARD_THEME_ORDER: BoardTheme[] = ["green", "brown", "blue"];
+const DEFAULT_THEME: BoardTheme = "green";
+const BOARD_THEME_KEY = "chess-board-theme";
 
 const MIN_BOARD = 320;
 const MAX_BOARD = 900;
@@ -55,10 +64,26 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
   const [size, setSize] = useState(DEFAULT_BOARD);
   const [resizing, setResizing] = useState(false);
 
+  // Board colour scheme (persisted across sessions).
+  const [theme, setTheme] = useState<BoardTheme>(DEFAULT_THEME);
+
   useEffect(() => {
     const saved = Number(window.localStorage.getItem(BOARD_SIZE_KEY));
     if (saved >= MIN_BOARD && saved <= MAX_BOARD) setSize(saved);
+    const savedTheme = window.localStorage.getItem(BOARD_THEME_KEY);
+    if (savedTheme && savedTheme in BOARD_THEMES) {
+      setTheme(savedTheme as BoardTheme);
+    }
   }, []);
+
+  const selectTheme = (name: BoardTheme) => {
+    setTheme(name);
+    try {
+      window.localStorage.setItem(BOARD_THEME_KEY, name);
+    } catch {
+      /* ignore */
+    }
+  };
 
   const startResize = (e: ReactPointerEvent) => {
     e.preventDefault();
@@ -190,8 +215,8 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       position: fen,
       boardOrientation: orientation,
       animationDurationInMs: 200,
-      darkSquareStyle: { backgroundColor: DARK },
-      lightSquareStyle: { backgroundColor: LIGHT },
+      darkSquareStyle: { backgroundColor: BOARD_THEMES[theme].dark },
+      lightSquareStyle: { backgroundColor: BOARD_THEMES[theme].light },
       squareStyles: { ...highlightStyles, ...optionSquares },
       arrows,
       id: "trainer-board",
@@ -251,6 +276,7 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     [
       fen,
       orientation,
+      theme,
       highlightStyles,
       optionSquares,
       arrows,
@@ -320,6 +346,33 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
         <ControlButton onClick={resetBoard} disabled={mode === "train"} title="Reset to start">
           ↺ Reset
         </ControlButton>
+
+        <div className="mx-1 h-5 w-px bg-slate-700" />
+        <div className="flex items-center gap-1" role="group" aria-label="Board colour">
+          {BOARD_THEME_ORDER.map((name) => {
+            const t = BOARD_THEMES[name];
+            const active = theme === name;
+            return (
+              <button
+                key={name}
+                type="button"
+                onClick={() => selectTheme(name)}
+                title={`${t.label} board`}
+                aria-label={`${t.label} board`}
+                aria-pressed={active}
+                className={`h-6 w-6 rounded-md border transition ${
+                  active
+                    ? "border-emerald-400 ring-2 ring-emerald-400/70"
+                    : "border-slate-600 hover:border-slate-400"
+                }`}
+                style={{
+                  background: `linear-gradient(135deg, ${t.light} 0 50%, ${t.dark} 50% 100%)`,
+                }}
+              />
+            );
+          })}
+        </div>
+
         <div className="ml-auto text-xs text-slate-400">
           <EngineStatusBadge status={engineStatus} enabled={engineEnabled} evaluation={evalMatches ? evaluation : null} />
         </div>

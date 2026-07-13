@@ -105,11 +105,16 @@ export function findGaps(rep: Repertoire, book: Book): Gap[] {
   return gaps;
 }
 
-/** Dedupe transpositions, drop obscure lines, sort by importance, cap the list. */
-export function rankGaps(gaps: Gap[], limit = 40): Gap[] {
+/**
+ * Dedupe transpositions, drop obscure lines, sort by importance, cap the list.
+ * `minImportance` hides gaps you'll reach less often than that (0..1) — the
+ * knob behind the club / tournament / master thoroughness levels.
+ */
+export function rankGaps(gaps: Gap[], limit = 40, minImportance = 0): Gap[] {
   const seen = new Map<string, Gap>();
   for (const g of gaps) {
     if (g.kind === "defense" && g.count < 2) continue; // skip one-off offbeat lines
+    if (g.importance < minImportance) continue; // below the chosen thoroughness
     const k = `${keyOf(g.fen)}|${g.missingSan ?? "reply"}`;
     const prev = seen.get(k);
     if (!prev || g.importance > prev.importance) seen.set(k, g);

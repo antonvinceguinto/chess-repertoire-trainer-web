@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTrainer } from "@/context/TrainerContext";
 import { useEngine } from "@/hooks/useEngine";
 import { useCoverage } from "@/hooks/useCoverage";
+import {
+  DEFAULT_THOROUGHNESS,
+  minImportanceFor,
+  THOROUGHNESS_KEY,
+  type Thoroughness,
+} from "@/lib/thoroughness";
 import { BoardPanel } from "./BoardPanel";
 import { MoveList } from "./MoveList";
 import { EnginePanel } from "./EnginePanel";
@@ -12,6 +18,7 @@ import { CoveragePanel } from "./CoveragePanel";
 import { RepertoireSelect } from "./RepertoireSelect";
 import { RepertoirePanel } from "./RepertoirePanel";
 import { TrainPanel } from "./TrainPanel";
+import { FixPanel } from "./FixPanel";
 
 type Tab = "analysis" | "repertoire" | "gaps";
 
@@ -23,20 +30,43 @@ export function ChessTrainer() {
     playLineSans,
     startTraining,
     stopTraining,
+    fixQueue,
+    startFix,
   } = useTrainer();
 
   const [engineOn, setEngineOn] = useState(true);
   const [multipv, setMultipv] = useState(3);
   const [tab, setTab] = useState<Tab>("analysis");
+  const [thoroughness, setThoroughness] = useState<Thoroughness>(
+    DEFAULT_THOROUGHNESS,
+  );
 
-  const engineEnabled = engineOn && mode === "build";
+  useEffect(() => {
+    const saved = window.localStorage.getItem(THOROUGHNESS_KEY);
+    if (saved === "club" || saved === "tournament" || saved === "master") {
+      setThoroughness(saved);
+    }
+  }, []);
+
+  const changeThoroughness = (t: Thoroughness) => {
+    setThoroughness(t);
+    try {
+      window.localStorage.setItem(THOROUGHNESS_KEY, t);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Keep the engine running while fixing gaps even if the user turned it off,
+  // so the recommended reply always has an eval.
+  const engineEnabled = (engineOn || !!fixQueue) && mode === "build";
   const { status, evaluation } = useEngine(fen, engineEnabled, multipv);
   const {
     gaps,
     progress,
     ready: gapsReady,
     error: gapsError,
-  } = useCoverage(activeRepertoire);
+  } = useCoverage(activeRepertoire, minImportanceFor(thoroughness));
 
   const prepareGap = (sans: string[]) => {
     playLineSans(sans);
@@ -68,6 +98,8 @@ export function ChessTrainer() {
 
           {mode === "train" ? (
             <TrainPanel />
+          ) : fixQueue ? (
+            <FixPanel evaluation={evaluation} status={status} />
           ) : (
             <>
               <MoveList />
@@ -116,7 +148,10 @@ export function ChessTrainer() {
                   gaps={gaps}
                   ready={gapsReady}
                   error={gapsError}
+                  level={thoroughness}
+                  onLevelChange={changeThoroughness}
                   onPrepare={prepareGap}
+                  onStartFix={startFix}
                 />
               )}
             </>

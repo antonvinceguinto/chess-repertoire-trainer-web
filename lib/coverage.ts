@@ -59,7 +59,11 @@ interface Acc {
  * (so "…Bb4" counts toward the Nimzo-Indian) and marked covered or a gap.
  * A line that ends on your own move counts as one open item for its opening.
  */
-export function openingProgress(rep: Repertoire, book: Book): OpeningProgress[] {
+export function openingProgress(
+  rep: Repertoire,
+  book: Book,
+  minImportance = 0,
+): OpeningProgress[] {
   const userChar = rep.color === "white" ? "w" : "b";
   const fams = new Map<string, Acc>();
 
@@ -86,11 +90,11 @@ export function openingProgress(rep: Repertoire, book: Book): OpeningProgress[] 
         const child = prepared.get(san);
         const w = reach * (count / total);
 
-        // A rare one-off reply doesn't count toward the score, but if you've
-        // prepared an answer to it we still walk that subtree so its deeper
-        // (popular) lines are measured — mirroring findGaps, which never gates
-        // its recursion on move popularity.
-        if (count >= MIN_COUNT) {
+        // A rare or below-threshold reply doesn't count toward the score, but
+        // if you've prepared an answer to it we still walk that subtree so its
+        // deeper (popular) lines are measured — mirroring findGaps, which never
+        // gates its recursion on move popularity.
+        if (count >= MIN_COUNT && w >= minImportance) {
           const lab = labelOf(book, nameIdx);
           const family = lab?.family ?? "Other lines";
           const a = acc(family, lab?.eco ?? null);
@@ -130,8 +134,9 @@ export function openingProgress(rep: Repertoire, book: Book): OpeningProgress[] 
         }
       }
     } else if (nodes.length === 0) {
-      // A line that stops on your move — one undecided item for its opening.
-      if (sans.length === 0) return;
+      // A line that stops on your move — one undecided item for its opening
+      // (unless it's rarer than the chosen thoroughness level).
+      if (sans.length === 0 || reach < minImportance) return;
       const lab = labelOf(book, book.positions[key]);
       const family = lab?.family ?? "Other lines";
       const a = acc(family, lab?.eco ?? null);
@@ -179,7 +184,8 @@ export function openingProgress(rep: Repertoire, book: Book): OpeningProgress[] 
       total,
       coverage: a.covered / total,
       reach: a.reach,
-      // Show every open item so the expanded list matches the "N to close" count.
+      // Show every open item so the expanded list matches the "N to close"
+      // count. (Gaps were already thresholded above, so no minImportance here.)
       gaps: rankGaps(a.gaps, Math.max(60, a.open)),
     });
   }

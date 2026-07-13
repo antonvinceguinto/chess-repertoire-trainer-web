@@ -11,7 +11,10 @@ import type { Repertoire } from "@/lib/types";
  * flat ranked gap list and the per-opening coverage progress. Recomputes when
  * the repertoire changes, so numbers move as you fill lines in.
  */
-export function useCoverage(rep: Repertoire | null): {
+export function useCoverage(
+  rep: Repertoire | null,
+  minImportance = 0,
+): {
   ready: boolean;
   error: boolean;
   gaps: Gap[];
@@ -31,12 +34,12 @@ export function useCoverage(rep: Repertoire | null): {
   }, []);
 
   const gaps = useMemo(
-    () => (rep && book ? rankGaps(findGaps(rep, book)) : []),
-    [rep, book],
+    () => (rep && book ? rankGaps(findGaps(rep, book), 40, minImportance) : []),
+    [rep, book, minImportance],
   );
   const progress = useMemo(
-    () => (rep && book ? openingProgress(rep, book) : []),
-    [rep, book],
+    () => (rep && book ? openingProgress(rep, book, minImportance) : []),
+    [rep, book, minImportance],
   );
 
   return { ready: !!book, error, gaps, progress };

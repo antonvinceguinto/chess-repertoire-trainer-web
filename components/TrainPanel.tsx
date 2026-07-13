@@ -115,7 +115,7 @@ export function TrainPanel() {
               </span>{" "}
               of {totalLines}
             </span>
-            <span className="text-slate-500">drilled in order</span>
+            <span className="text-slate-500">🔀 shuffled</span>
           </div>
           <div className="flex h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
             <div
@@ -152,7 +152,7 @@ export function TrainPanel() {
         {session.status === "complete" ? (
           <>
             <Button variant="primary" onClick={nextTrainingLine} disabled={totalLines <= 1}>
-              → Next line
+              {isLastLine ? "🔀 New shuffle" : "→ Next line"}
             </Button>
             <Button variant="secondary" onClick={restartLine}>
               ↻ Repeat line
@@ -200,7 +200,7 @@ export function TrainPanel() {
           onClick={startTraining}
           className="text-[11px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
         >
-          Restart from line 1
+          🔀 Reshuffle &amp; restart
         </button>
         <Button variant="ghost" onClick={stopTraining} className="ml-auto">
           ← Exit training
@@ -208,10 +208,10 @@ export function TrainPanel() {
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
-        Lines are drilled one at a time, in order. The app plays the
-        opponent&apos;s moves for the current line while you recall yours. Use{" "}
-        <span className="text-slate-400">Next line</span> to work through your
-        entire repertoire.
+        Lines are drilled in a random order — every line comes up once before any
+        repeats. The app plays the opponent&apos;s moves while you recall yours;
+        once you&apos;ve finished the whole repertoire it reshuffles for a fresh
+        pass.
       </p>
     </Panel>
   );

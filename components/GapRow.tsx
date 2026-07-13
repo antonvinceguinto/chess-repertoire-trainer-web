@@ -1,6 +1,7 @@
 "use client";
 
 import { START_FEN, formatMoveSequence } from "@/lib/chess";
+import { DANGER_META, type DangerScore } from "@/lib/danger";
 import type { Gap } from "@/lib/gaps";
 
 /**
@@ -19,11 +20,13 @@ export function GapRow({
   gap,
   rank,
   maxImp,
+  danger,
   onPrepare,
 }: {
   gap: Gap;
   rank: number;
   maxImp: number;
+  danger?: DangerScore;
   onPrepare: (sans: string[]) => void;
 }) {
   const path =
@@ -65,6 +68,17 @@ export function GapRow({
             )}
             {title}
           </span>
+          {danger && (
+            <span
+              className={`inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold ${DANGER_META[danger.level].text}`}
+              title="How much being unprepared here can hurt (engine-scored)"
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${DANGER_META[danger.level].dot}`}
+              />
+              {DANGER_META[danger.level].label}
+            </span>
+          )}
           <span className={`shrink-0 text-[10px] font-medium ${tag.cls}`}>
             {tag.label}
           </span>

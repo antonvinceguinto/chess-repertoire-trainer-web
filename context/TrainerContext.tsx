@@ -36,6 +36,7 @@ import {
   setComment,
 } from "@/lib/repertoire";
 import { mergeRepertoires } from "@/lib/transfer";
+import { reshuffleLines, shuffle } from "@/lib/shuffle";
 
 interface TrainerContextValue {
   // Position
@@ -89,6 +90,14 @@ interface TrainerContextValue {
   restartLine: () => void;
   nextTrainingLine: () => void;
   prevTrainingLine: () => void;
+
+  // Guided gap fixing
+  fixQueue: string[][] | null;
+  fixIndex: number;
+  startFix: (paths: string[][]) => void;
+  fixAddMove: (san: string) => void;
+  skipFix: () => void;
+  endFix: () => void;
 }
 
 const TrainerContext = createContext<TrainerContextValue | null>(null);
@@ -126,6 +135,9 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<Mode>("build");
   const [session, setSession] = useState<TrainSession | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // Guided gap-fixing: a queue of gap positions to walk through and answer.
+  const [fixQueue, setFixQueue] = useState<string[][] | null>(null);
+  const [fixIndex, setFixIndex] = useState(0);
 
   const fen = fenAtPly(line, ply);
   const turn = turnOf(fen);
@@ -368,6 +380,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   const selectRepertoire = useCallback(
     (id: string) => {
       setActiveId(id);
+      setFixQueue(null); // a queue built for another repertoire no longer applies
       const rep = repertoires.find((r) => r.id === id);
       if (rep) setOrientation(rep.color);
     },
@@ -452,6 +465,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   const setMode = useCallback(
     (m: Mode) => {
       stopAnimation();
+      setFixQueue(null);
       setModeState(m);
       if (m === "build") setSession(null);
     },
@@ -462,7 +476,9 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     const rep = activeRepertoire;
     if (!rep) return;
     stopAnimation();
-    const lines = enumerateLines(rep);
+    setFixQueue(null);
+    // Random order, but a full shuffled pass covers every line before any repeat.
+    const lines = shuffle(enumerateLines(rep));
     setLine([]);
     setPly(0);
     setOrientation(rep.color);
@@ -499,17 +515,26 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
-  // Step to another line in the repertoire (wraps around).
-  const stepLine = useCallback((delta: number) => {
+  // Advance to the next line in the shuffled order. Reaching the end means the
+  // whole repertoire was drilled, so reshuffle for a fresh random pass.
+  const nextTrainingLine = useCallback(() => {
     setLine([]);
     setPly(0);
     setSession((s) => {
       if (!s || s.lines.length === 0) return s;
-      const lineIndex =
-        (s.lineIndex + delta + s.lines.length) % s.lines.length;
+      if (s.lineIndex < s.lines.length - 1) {
+        return {
+          ...s,
+          lineIndex: s.lineIndex + 1,
+          status: "playing",
+          lastWrong: null,
+          revealed: false,
+        };
+      }
       return {
         ...s,
-        lineIndex,
+        lines: reshuffleLines(s.lines, s.lines[s.lineIndex]),
+        lineIndex: 0,
         status: "playing",
         lastWrong: null,
         revealed: false,
@@ -517,8 +542,74 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const nextTrainingLine = useCallback(() => stepLine(1), [stepLine]);
-  const prevTrainingLine = useCallback(() => stepLine(-1), [stepLine]);
+  // Step back through lines already seen this pass (stops at the first).
+  const prevTrainingLine = useCallback(() => {
+    setLine([]);
+    setPly(0);
+    setSession((s) => {
+      if (!s || s.lines.length === 0) return s;
+      return {
+        ...s,
+        lineIndex: Math.max(0, s.lineIndex - 1),
+        status: "playing",
+        lastWrong: null,
+        revealed: false,
+      };
+    });
+  }, []);
+
+  /* ---------------- Guided gap fixing ---------------- */
+
+  // Start walking a queue of gap positions; each lands where it's your move so
+  // you can add a response and jump straight to the next one.
+  const startFix = useCallback(
+    (paths: string[][]) => {
+      if (paths.length === 0) return;
+      stopAnimation();
+      setModeState("build");
+      setSession(null);
+      setFixQueue(paths);
+      setFixIndex(0);
+      loadLineSans(paths[0]);
+    },
+    [stopAnimation, loadLineSans],
+  );
+
+  const advanceFix = useCallback(
+    (from: number) => {
+      const next = from + 1;
+      setFixIndex(next);
+      if (fixQueue && next < fixQueue.length) {
+        loadLineSans(fixQueue[next]);
+      } else {
+        setLine([]);
+        setPly(0);
+      }
+    },
+    [fixQueue, loadLineSans],
+  );
+
+  // Save the chosen response at the current gap, then advance to the next.
+  const fixAddMove = useCallback(
+    (san: string) => {
+      const rep = activeRepertoire;
+      if (!rep) return;
+      const mv = tryMove(fen, san);
+      if (!mv) return;
+      updateRepertoire(rep.id, (r) => addLine(r, [...line.slice(0, ply), mv]));
+      advanceFix(fixIndex);
+    },
+    [activeRepertoire, fen, line, ply, updateRepertoire, advanceFix, fixIndex],
+  );
+
+  const skipFix = useCallback(() => advanceFix(fixIndex), [advanceFix, fixIndex]);
+
+  const endFix = useCallback(() => {
+    setFixQueue(null);
+    setFixIndex(0);
+    setLine([]);
+    setPly(0);
+  }, []);
 
   const value: TrainerContextValue = {
     line,
@@ -560,6 +651,12 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     restartLine,
     nextTrainingLine,
     prevTrainingLine,
+    fixQueue,
+    fixIndex,
+    startFix,
+    fixAddMove,
+    skipFix,
+    endFix,
   };
 
   return (
