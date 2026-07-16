@@ -6,21 +6,28 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { Chessboard } from "react-chessboard";
 import { useTrainer } from "@/context/TrainerContext";
 import { legalMoves, tryMove } from "@/lib/chess";
+import type { Classification } from "@/lib/classify";
 import type { EngineEval, EngineStatus } from "@/lib/types";
 import { EvalBar } from "./EvalBar";
+import { MoveClassDisc } from "./MoveClassBadge";
 import { ControlButton } from "./ui";
 
 interface Props {
   evaluation: EngineEval | null;
   engineStatus: EngineStatus;
   engineEnabled: boolean;
+  /** Move reactions keyed by 0-based move index, for the on-board badge. */
+  moveClasses?: Map<number, Classification>;
 }
 
 const HIGHLIGHT = "rgba(250, 204, 21, 0.45)";
+/** Right-click annotation colour (Lichess-style square marker). */
+const RED_HIGHLIGHT = "rgba(235, 66, 66, 0.6)";
 
 /** Selectable board colour schemes (light / dark square colours). */
 const BOARD_THEMES = {
@@ -38,7 +45,12 @@ const MAX_BOARD = 900;
 const DEFAULT_BOARD = 560;
 const BOARD_SIZE_KEY = "chess-board-size";
 
-export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
+export function BoardPanel({
+  evaluation,
+  engineStatus,
+  engineEnabled,
+  moveClasses,
+}: Props) {
   const t = useTrainer();
   const {
     fen,
@@ -183,9 +195,18 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
 
   // Click / tap to move: first tap selects a piece, second tap moves it.
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
+  // Right-click square annotations (red markers), cleared when the position changes.
+  const [redSquares, setRedSquares] = useState<Set<string>>(new Set());
   useEffect(() => {
     setMoveFrom(null);
+    setRedSquares(new Set());
   }, [fen]);
+
+  const redStyles = useMemo(() => {
+    const styles: Record<string, CSSProperties> = {};
+    for (const sq of redSquares) styles[sq] = { background: RED_HIGHLIGHT };
+    return styles;
+  }, [redSquares]);
 
   // Highlight the selected square and dots on its legal destinations.
   const optionSquares = useMemo(() => {
@@ -237,6 +258,49 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     });
   }, [mode, session, ply, fen, engineEnabled, evalMatches, evaluation]);
 
+  // The last move's reaction badge (chess.com-style), shown while review is on.
+  const badgeSquare = lastMove?.to ?? null;
+  const badgeClass = lastMove ? moveClasses?.get(ply - 1)?.cls ?? null : null;
+
+  // Merge move highlights with the click-to-move option dots; also reused by the
+  // custom square renderer below (which replaces the board's default squares).
+  const squareStyles = useMemo(
+    () => ({ ...highlightStyles, ...redStyles, ...optionSquares }),
+    [highlightStyles, redStyles, optionSquares],
+  );
+
+  // Draw the reaction badge on the last move's destination square. Providing a
+  // squareRenderer replaces the board's default square content, so it re-applies
+  // squareStyles itself; it's left undefined when there's no badge to show.
+  const squareRenderer = useMemo(() => {
+    if (!badgeClass || !badgeSquare) return undefined;
+    return ({ square, children }: { square: string; children?: ReactNode }) => (
+      <div
+        style={{ position: "relative", width: "100%", height: "100%", ...squareStyles[square] }}
+      >
+        {children}
+        {square === badgeSquare && (
+          <div
+            style={{
+              // A CSS size-container (so the disc sizes its glyph to the square),
+              // kept inside the square since the board clips overflow at edges.
+              position: "absolute",
+              top: "2%",
+              right: "2%",
+              width: "40%",
+              height: "40%",
+              containerType: "size",
+              zIndex: 30,
+              pointerEvents: "none",
+            }}
+          >
+            <MoveClassDisc cls={badgeClass} />
+          </div>
+        )}
+      </div>
+    );
+  }, [badgeClass, badgeSquare, squareStyles]);
+
   const options = useMemo(
     () => ({
       position: fen,
@@ -244,9 +308,10 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       animationDurationInMs: 200,
       darkSquareStyle: { backgroundColor: BOARD_THEMES[theme].dark },
       lightSquareStyle: { backgroundColor: BOARD_THEMES[theme].light },
-      squareStyles: { ...highlightStyles, ...optionSquares },
+      squareStyles,
       arrows,
       id: "trainer-board",
+      squareRenderer,
       canDragPiece: ({ piece }: { piece: { pieceType: string } }) => {
         if (mode === "train") {
           if (!userChar) return false;
@@ -278,6 +343,8 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
         square: string;
         piece: { pieceType: string } | null;
       }) => {
+        // Any left click clears the red annotations.
+        setRedSquares((prev) => (prev.size === 0 ? prev : new Set()));
         // A piece is already selected and a different square was tapped: try to move.
         if (moveFrom && square !== moveFrom) {
           const legal = legalMoves(fen).filter(
@@ -304,14 +371,24 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
             : pc === turn);
         setMoveFrom(canSelect ? square : null);
       },
+      // Right-click toggles a red marker on the square (right-drag still draws
+      // arrows via react-chessboard's built-in handling).
+      onSquareRightClick: ({ square }: { square: string }) => {
+        setRedSquares((prev) => {
+          const next = new Set(prev);
+          if (next.has(square)) next.delete(square);
+          else next.add(square);
+          return next;
+        });
+      },
     }),
     [
       fen,
       orientation,
       theme,
-      highlightStyles,
-      optionSquares,
+      squareStyles,
       arrows,
+      squareRenderer,
       mode,
       userChar,
       turn,

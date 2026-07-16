@@ -15,6 +15,15 @@ export function turnOf(fen: string): Turn {
   return fen.split(" ")[1] === "b" ? "b" : "w";
 }
 
+/**
+ * Position key: FEN normalised to its first four fields (placement, side,
+ * castling, en passant), so different move orders reaching the same position
+ * collapse to one key. Everything that indexes positions keys on this.
+ */
+export function fenKey(fen: string): string {
+  return fen.split(" ").slice(0, 4).join(" ");
+}
+
 /** Full-move number in a FEN. */
 export function moveNumberOf(fen: string): number {
   const n = parseInt(fen.split(" ")[5] ?? "1", 10);
@@ -172,6 +181,46 @@ export function queryBoard(fen: string): BoardQuery {
       return chess.getCastlingRights(color) as { k: boolean; q: boolean };
     },
   };
+}
+
+/** Rough piece values in centipawns, for static exchange evaluation. */
+export const SEE_PIECE_VALUE: Record<string, number> = {
+  p: 100,
+  n: 300,
+  b: 300,
+  r: 500,
+  q: 900,
+  k: 10000,
+};
+
+/**
+ * Static Exchange Evaluation for the square `square`: the material (in
+ * centipawns) the side to move can win by initiating a capture sequence there,
+ * assuming both sides always recapture with their least valuable piece and stop
+ * once continuing would lose material. Returns 0 when there is nothing to win
+ * (or nothing to capture). Because it plays real legal moves on chess.js, pins,
+ * checks and x-ray recaptures are all respected automatically.
+ */
+export function staticExchangeGain(fen: string, square: string): number {
+  return seeGain(new Chess(fen), square);
+}
+
+/** SEE recursion on a single reused board (move / undo) to avoid re-parsing FENs. */
+function seeGain(chess: Chess, square: string): number {
+  const victim = chess.get(square as Square);
+  if (!victim) return 0; // nothing standing on the square to capture
+  const captures = (chess.moves({ verbose: true }) as Move[])
+    .filter((m) => m.to === square && (m.flags.includes("c") || m.flags.includes("e")))
+    .sort((a, b) => (SEE_PIECE_VALUE[a.piece] ?? 0) - (SEE_PIECE_VALUE[b.piece] ?? 0));
+  if (captures.length === 0) return 0;
+
+  const lva = captures[0]; // least valuable attacker moves first
+  const victimValue = SEE_PIECE_VALUE[victim.type] ?? 0;
+  chess.move({ from: lva.from, to: lva.to, promotion: lva.promotion });
+  // The capturer keeps the sequence going only while it stays profitable.
+  const gain = victimValue - seeGain(chess, square);
+  chess.undo();
+  return Math.max(0, gain);
 }
 
 /**

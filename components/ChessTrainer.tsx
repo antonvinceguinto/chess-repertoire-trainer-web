@@ -5,6 +5,7 @@ import { useTrainer } from "@/context/TrainerContext";
 import { useEngine } from "@/hooks/useEngine";
 import { useCoverage } from "@/hooks/useCoverage";
 import { useBookData } from "@/hooks/useBookData";
+import { useMoveReview } from "@/hooks/useMoveReview";
 import { importantLines } from "@/lib/lines";
 import { enumerateLines } from "@/lib/repertoire";
 import {
@@ -28,10 +29,13 @@ type Tab = "analysis" | "repertoire" | "gaps";
 // Persisted preference: whether Stockfish runs at all. Off = a purely book-driven
 // workflow (no evals, no danger scoring, worker never loaded).
 const ENGINE_KEY = "chess-engine-enabled";
+// Persisted preference: whether to grade moves with chess.com-style reactions.
+const REVIEW_KEY = "chess-move-review";
 
 export function ChessTrainer() {
   const {
     fen,
+    line,
     mode,
     activeRepertoire,
     startTraining,
@@ -42,6 +46,7 @@ export function ChessTrainer() {
   const book = useBookData();
 
   const [engineOn, setEngineOnState] = useState(true);
+  const [reviewOn, setReviewOnState] = useState(true);
   const [multipv, setMultipv] = useState(3);
   const [tab, setTab] = useState<Tab>("analysis");
   const [thoroughness, setThoroughness] = useState<Thoroughness>(
@@ -61,6 +66,8 @@ export function ChessTrainer() {
       }
       // Restore a previously chosen book-only (engine off) preference.
       if (window.localStorage.getItem(ENGINE_KEY) === "0") setEngineOnState(false);
+      // Restore the move-review (reactions) preference.
+      if (window.localStorage.getItem(REVIEW_KEY) === "0") setReviewOnState(false);
     } catch {
       /* ignore */
     }
@@ -71,6 +78,15 @@ export function ChessTrainer() {
     setEngineOnState(on);
     try {
       window.localStorage.setItem(ENGINE_KEY, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const setReviewOn = (on: boolean) => {
+    setReviewOnState(on);
+    try {
+      window.localStorage.setItem(REVIEW_KEY, on ? "1" : "0");
     } catch {
       /* ignore */
     }
@@ -122,6 +138,14 @@ export function ChessTrainer() {
   // re-enables it behind the user's back.
   const engineEnabled = engineOn && hydrated && mode === "build";
   const { status, evaluation } = useEngine(fen, engineEnabled, multipv);
+
+  // Move review runs its own background engine to grade every move in the
+  // current line — only while building with the engine on (not during a fix).
+  // Both sides are graded: while building you play the whole line yourself, and
+  // an opponent's blunder is exactly what the review should surface.
+  const reviewEnabled = engineEnabled && reviewOn && !fixQueue;
+  const review = useMoveReview(line, reviewEnabled, book);
+
   const {
     gaps,
     progress,
@@ -184,6 +208,7 @@ export function ChessTrainer() {
             evaluation={evaluation}
             engineStatus={status}
             engineEnabled={engineEnabled}
+            moveClasses={reviewEnabled ? review.classes : undefined}
           />
         </div>
 
@@ -200,7 +225,13 @@ export function ChessTrainer() {
             <FixPanel evaluation={evaluation} status={status} engineOn={engineOn} />
           ) : (
             <>
-              <MoveList />
+              <MoveList
+                classes={review.classes}
+                reviewOn={reviewOn}
+                onToggleReview={setReviewOn}
+                reviewAvailable={engineOn}
+                reviewBusy={review.busy}
+              />
 
               <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1 text-sm">
                 {(["analysis", "repertoire", "gaps"] as Tab[]).map((tb) => (
