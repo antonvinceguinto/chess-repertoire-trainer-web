@@ -94,8 +94,9 @@ export function EnginePanel({
       />
       <div className="p-2">
         {!engineOn ? (
-          <p className="px-1 py-3 text-center text-xs text-slate-500">
-            Engine is off. Turn it on to see Stockfish evaluations.
+          <p className="px-1 py-3 text-center text-xs leading-relaxed text-slate-500">
+            Engine is off — you&apos;re working from book moves only. Turn it on
+            for Stockfish evaluations.
           </p>
         ) : status === "error" ? (
           <p className="px-1 py-3 text-center text-xs text-rose-400">

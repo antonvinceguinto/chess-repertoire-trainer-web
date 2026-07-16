@@ -25,6 +25,10 @@ import { FixPanel } from "./FixPanel";
 
 type Tab = "analysis" | "repertoire" | "gaps";
 
+// Persisted preference: whether Stockfish runs at all. Off = a purely book-driven
+// workflow (no evals, no danger scoring, worker never loaded).
+const ENGINE_KEY = "chess-engine-enabled";
+
 export function ChessTrainer() {
   const {
     fen,
@@ -37,20 +41,40 @@ export function ChessTrainer() {
   } = useTrainer();
   const book = useBookData();
 
-  const [engineOn, setEngineOn] = useState(true);
+  const [engineOn, setEngineOnState] = useState(true);
   const [multipv, setMultipv] = useState(3);
   const [tab, setTab] = useState<Tab>("analysis");
   const [thoroughness, setThoroughness] = useState<Thoroughness>(
     DEFAULT_THOROUGHNESS,
   );
   const [bookHidden, setBookHidden] = useState(false);
+  // Persisted prefs live in localStorage, which is only readable after mount.
+  // Until we've read them, keep the engine dormant so a saved "off" choice never
+  // spins up (then tears down) a Stockfish worker on load.
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(THOROUGHNESS_KEY);
-    if (saved === "club" || saved === "tournament" || saved === "master") {
-      setThoroughness(saved);
+    try {
+      const saved = window.localStorage.getItem(THOROUGHNESS_KEY);
+      if (saved === "club" || saved === "tournament" || saved === "master") {
+        setThoroughness(saved);
+      }
+      // Restore a previously chosen book-only (engine off) preference.
+      if (window.localStorage.getItem(ENGINE_KEY) === "0") setEngineOnState(false);
+    } catch {
+      /* ignore */
     }
+    setHydrated(true);
   }, []);
+
+  const setEngineOn = (on: boolean) => {
+    setEngineOnState(on);
+    try {
+      window.localStorage.setItem(ENGINE_KEY, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
 
   const changeThoroughness = (t: Thoroughness) => {
     setThoroughness(t);
@@ -91,9 +115,12 @@ export function ChessTrainer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book]);
 
-  // Keep the engine running while fixing gaps even if the user turned it off,
-  // so the recommended reply always has an eval.
-  const engineEnabled = (engineOn || !!fixQueue) && mode === "build";
+  // Stockfish runs only while building with the engine turned on, and only once
+  // the persisted preference has been read (so a saved "off" never briefly boots
+  // the worker). Turning it off is a global, persisted choice that drops the
+  // whole app into a book-only workflow (gap-fixing included) — nothing here
+  // re-enables it behind the user's back.
+  const engineEnabled = engineOn && hydrated && mode === "build";
   const { status, evaluation } = useEngine(fen, engineEnabled, multipv);
   const {
     gaps,
@@ -170,7 +197,7 @@ export function ChessTrainer() {
               onLevelChange={changeTrainLevel}
             />
           ) : fixQueue ? (
-            <FixPanel evaluation={evaluation} status={status} />
+            <FixPanel evaluation={evaluation} status={status} engineOn={engineOn} />
           ) : (
             <>
               <MoveList />
@@ -220,6 +247,7 @@ export function ChessTrainer() {
                   onLevelChange={changeThoroughness}
                   onPrepare={prepareGap}
                   onStartFix={startFix}
+                  engineAvailable={engineOn}
                 />
               )}
             </>

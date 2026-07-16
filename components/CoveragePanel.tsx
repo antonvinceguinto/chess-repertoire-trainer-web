@@ -23,6 +23,8 @@ interface Props {
   onLevelChange: (level: Thoroughness) => void;
   onPrepare: (sans: string[]) => void;
   onStartFix: (paths: string[][]) => void;
+  /** Whether Stockfish is on — danger scoring needs it, so it's gated on this. */
+  engineAvailable: boolean;
 }
 
 type View = "openings" | "gaps" | "answered";
@@ -41,10 +43,14 @@ export function CoveragePanel({
   onLevelChange,
   onPrepare,
   onStartFix,
+  engineAvailable,
 }: Props) {
   const { activeRepertoire } = useTrainer();
   const [view, setView] = useState<View>("openings");
-  const [dangerOn, setDangerOn] = useState(false);
+  const [dangerPref, setDangerPref] = useState(false);
+  // Danger scoring runs Stockfish, so it can only be active when the engine is
+  // on — a persisted "engine off" choice forces it back to plain importance order.
+  const dangerOn = dangerPref && engineAvailable;
   const hasLines = !!activeRepertoire && activeRepertoire.root.length > 0;
 
   const overall = useMemo(() => overallProgress(progress), [progress]);
@@ -113,7 +119,8 @@ export function CoveragePanel({
           onPrepare={onPrepare}
           onStartFix={onStartFix}
           dangerOn={dangerOn}
-          onDangerToggle={() => setDangerOn((d) => !d)}
+          onDangerToggle={() => setDangerPref((d) => !d)}
+          engineAvailable={engineAvailable}
           dangerScores={danger.scores}
           dangerDone={danger.done}
           dangerTotal={danger.total}
@@ -416,6 +423,7 @@ function AllGapsView({
   onStartFix,
   dangerOn,
   onDangerToggle,
+  engineAvailable,
   dangerScores,
   dangerDone,
   dangerTotal,
@@ -426,6 +434,7 @@ function AllGapsView({
   onStartFix: (paths: string[][]) => void;
   dangerOn: boolean;
   onDangerToggle: () => void;
+  engineAvailable: boolean;
   dangerScores: Map<string, DangerScore>;
   dangerDone: number;
   dangerTotal: number;
@@ -468,8 +477,13 @@ function AllGapsView({
         <button
           type="button"
           onClick={onDangerToggle}
-          title="Rank by how sharp each gap is, using Stockfish"
-          className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-medium transition ${
+          disabled={!engineAvailable}
+          title={
+            engineAvailable
+              ? "Rank by how sharp each gap is, using Stockfish"
+              : "Turn Stockfish on to rank gaps by danger"
+          }
+          className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
             dangerOn
               ? "border-rose-600/60 bg-rose-500/15 text-rose-300"
               : "border-slate-700 text-slate-400 hover:text-slate-200"
@@ -495,7 +509,8 @@ function AllGapsView({
         onClick={() => onStartFix(ordered.map(gapPath))}
         className="mb-2 w-full !py-1.5 text-xs"
       >
-        ⚡ Fix all {gaps.length} — guided, with engine suggestions
+        ⚡ Fix all {gaps.length} — guided
+        {engineAvailable ? ", with engine suggestions" : ""}
       </Button>
       <ul className="flex flex-col gap-1">
         {ordered.map((g, i) => (

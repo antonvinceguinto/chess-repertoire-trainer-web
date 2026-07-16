@@ -327,7 +327,9 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       style={{ width: size, maxWidth: "100%" }}
     >
       <div className="flex items-stretch gap-2">
-        <EvalBar bestLine={bestLine} orientation={orientation} />
+        {/* The eval bar only means something while Stockfish is actually
+            running (build mode, engine on) — hide it in book-only / train. */}
+        {engineEnabled && <EvalBar bestLine={bestLine} orientation={orientation} />}
         <div className="relative min-w-0 flex-1">
           <Chessboard options={options} />
           <div
