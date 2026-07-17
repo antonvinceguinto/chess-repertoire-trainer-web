@@ -31,7 +31,7 @@ A **fully client-side** Next.js app: one page (`app/page.tsx`) renders `TrainerP
 
 Nearly all state and behavior lives in this one context, consumed via `useTrainer()`. It owns:
 
-- **Board position** as `line: LineMove[]` (half-moves from the start) plus a `ply` cursor. The current `fen` is *derived*: `fenAtPly(line, ply)`. Navigation (`goBack`/`goForward`/`playMove`/…) just moves `ply` or splices `line`; playing a move at a mid-line ply truncates the future.
+- **Board position** as `line: LineMove[]` (half-moves from the start) plus a `ply` cursor. The current `fen` is _derived_: `fenAtPly(line, ply)`. Navigation (`goBack`/`goForward`/`playMove`/…) just moves `ply` or splices `line`; playing a move at a mid-line ply truncates the future.
 - **Repertoires** (loaded/saved to localStorage) and the active selection.
 - **Mode** (`build` | `train`) and, in train mode, the `TrainSession`.
 - **Gap-fixing queue** (`fixQueue`/`fixIndex`) for the guided Fix flow.
@@ -44,7 +44,7 @@ A repertoire is an immutable tree of `RepNode` (see `lib/types.ts`). `lib/repert
 
 ### Three knowledge sources
 
-1. **Stockfish 18 (WASM, in-browser)** — `lib/engine.ts` wraps the single-threaded "lite" worker under `public/stockfish/`, speaks UCI, tracks MultiPV lines, normalizes scores to White's perspective, and throttles emissions. `hooks/useEngine.ts` runs the primary worker (one at a time, re-analyzed on FEN change, stale evals discarded). Note `hooks/useDanger.ts` spins up a *second, separate* `StockfishEngine` for background gap scoring — keep the two instances independent so they don't contend.
+1. **Stockfish 18 (WASM, in-browser)** — `lib/engine.ts` wraps the single-threaded "lite" worker under `public/stockfish/`, speaks UCI, tracks MultiPV lines, normalizes scores to White's perspective, and throttles emissions. `hooks/useEngine.ts` runs the primary worker (one at a time, re-analyzed on FEN change, stale evals discarded). Note `hooks/useDanger.ts` spins up a _second, separate_ `StockfishEngine` for background gap scoring — keep the two instances independent so they don't contend.
 2. **Bundled opening book** — `public/openings/book.json` (~900 KB), generated offline by `scripts/build-book.mjs` from Lichess opening TSVs. `lib/book.ts` fetches/caches it. Compact shape: a shared `names` table + `positions` map + `moves` map. It powers opening names, theory-move suggestions, and all coverage/gap analysis.
 3. **Lichess opening explorer (live API)** — `lib/explorer.ts` (`fetchExplorer`) pulls real game statistics; `hooks/useExplorer.ts` drives it. Handles 429 rate-limiting explicitly.
 
