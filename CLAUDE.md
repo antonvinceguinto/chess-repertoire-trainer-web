@@ -25,7 +25,11 @@ node scripts/build-book.mjs <inputDir> <outFile>   # writes public/openings/book
 
 ## Architecture
 
-A **fully client-side** Next.js app: one page (`app/page.tsx`) renders `TrainerProvider` → `ChessTrainer`. There is no backend, no API route, and no database — every component is `"use client"` and all persistence is `localStorage`. The only network calls are to the live Lichess explorer API.
+An **almost entirely client-side** Next.js app: one page (`app/page.tsx`) renders `TrainerProvider` → `ChessTrainer`. There is no database, every component is `"use client"`, and all persistence is `localStorage`.
+
+There is exactly **one** server-side file, and it exists for a single unavoidable reason: `app/api/chesscom/route.ts`. Chess.com's public API serves no `Access-Control-Allow-Origin` header, so the browser cannot call it directly at all — that route is a same-origin GET proxy with a regex allowlist over four read-only `pub/player/...` paths. Don't add logic to it, and don't route anything else through it. (Deployments that serve this app as static files lose only the game-review lookup; `lib/chesscom.ts` detects the missing route and says so.)
+
+Outbound network calls: the Lichess explorer API (direct), and Chess.com (via that proxy).
 
 ### Single source of truth: `context/TrainerContext.tsx`
 
@@ -33,20 +37,24 @@ Nearly all state and behavior lives in this one context, consumed via `useTraine
 
 - **Board position** as `line: LineMove[]` (half-moves from the start) plus a `ply` cursor. The current `fen` is _derived_: `fenAtPly(line, ply)`. Navigation (`goBack`/`goForward`/`playMove`/…) just moves `ply` or splices `line`; playing a move at a mid-line ply truncates the future.
 - **Repertoires** (loaded/saved to localStorage) and the active selection.
-- **Mode** (`build` | `train`) and, in train mode, the `TrainSession`.
+- **Mode** (`build` | `train` | `review`) and, in train mode, the `TrainSession`.
 - **Gap-fixing queue** (`fixQueue`/`fixIndex`) for the guided Fix flow.
+- **Game review** (`reviewSession`, `reviewChallenge`, `variationFrom`) for the Review flow.
 
-`ChessTrainer.tsx` is the layout shell: it wires the shared hooks (engine, coverage, book) and swaps the right-hand panel based on `mode`/`fixQueue`/active tab. `BoardPanel.tsx` renders the `react-chessboard` and handles keyboard nav.
+`ChessTrainer.tsx` is the layout shell: it wires the shared hooks (engine, coverage, book, game review) and swaps the right-hand panel based on `mode`/`fixQueue`/active tab. `BoardPanel.tsx` renders the `react-chessboard` and handles keyboard nav.
+
+`playMove` dispatches on mode, using a ref per non-build mode (`fixSaveRef`, `reviewMoveRef`) so handlers defined later in the provider can be reached from a callback defined earlier. Follow that pattern rather than reordering the file.
 
 ### Repertoire data model
 
 A repertoire is an immutable tree of `RepNode` (see `lib/types.ts`). `lib/repertoire.ts` holds the pure tree operations (`addLine`, `removeLine`, `setComment`, `enumerateLines`, path lookups) and the localStorage layer (`loadRepertoires`/`saveRepertoires`, keys `chess-repertoires-v1` and `chess-active-repertoire-v1`). Mutations return new trees; the provider maps them into state.
 
-### Three knowledge sources
+### Four knowledge sources
 
-1. **Stockfish 18 (WASM, in-browser)** — `lib/engine.ts` wraps the single-threaded "lite" worker under `public/stockfish/`, speaks UCI, tracks MultiPV lines, normalizes scores to White's perspective, and throttles emissions. `hooks/useEngine.ts` runs the primary worker (one at a time, re-analyzed on FEN change, stale evals discarded). Note `hooks/useDanger.ts` spins up a _second, separate_ `StockfishEngine` for background gap scoring — keep the two instances independent so they don't contend.
-2. **Bundled opening book** — `public/openings/book.json` (~900 KB), generated offline by `scripts/build-book.mjs` from Lichess opening TSVs. `lib/book.ts` fetches/caches it. Compact shape: a shared `names` table + `positions` map + `moves` map. It powers opening names, theory-move suggestions, and all coverage/gap analysis.
+1. **Stockfish 18 (WASM, in-browser)** — `lib/engine.ts` wraps the single-threaded "lite" worker under `public/stockfish/`, speaks UCI, tracks MultiPV lines, normalizes scores to White's perspective, and throttles emissions. **Four** hooks each own a *separate* `StockfishEngine`: `useEngine` (live board analysis, one search at a time, re-analyzed on FEN change, stale evals discarded), `useDanger` (background gap scoring), `useMoveReview` (grading the line you're building), and `useGameReview` (whole-game sweep). Keep the instances independent so they never contend. `engineEnabled` in `ChessTrainer.tsx` decides when the primary one runs: while building with the engine toggled on, plus inside a review side line, where the sweep has no data to offer.
+2. **Bundled opening book** — `public/openings/book.json` (~900 KB), generated offline by `scripts/build-book.mjs` from Lichess opening TSVs. `lib/book.ts` fetches/caches it. Compact shape: a shared `names` table + `positions` map + `moves` map. It powers opening names, theory-move suggestions, coverage/gap analysis, and the "Book" class in both move review and game review.
 3. **Lichess opening explorer (live API)** — `lib/explorer.ts` (`fetchExplorer`) pulls real game statistics; `hooks/useExplorer.ts` drives it. Handles 429 rate-limiting explicitly.
+4. **Chess.com published-data API (live, via the proxy route)** — `lib/chesscom.ts` fetches a player's monthly archives and games by username, with no login. Archive lists and month payloads are cached in module-level `Map`s for the session (`refreshPlayer()` clears them for an explicit re-search); only the last username is persisted, in `chess-chesscom-username-v1`. Errors are typed by `ChessComError.kind` so the UI can distinguish a bad username from a rate limit from a missing proxy route.
 
 ### Position keys and transpositions
 
@@ -58,14 +66,29 @@ Everything that indexes positions (book, gaps, coverage, the book builder) keys 
 
 Optionally, **danger scoring** (`lib/danger.ts` + `hooks/useDanger.ts`) evaluates each gap's off-book position with the background engine and rates how costly being unprepared there is (Sharp / Tricky / Quiet), from how far behind you'd be and how "only-move" the best reply is. Results are cached by FEN for the session.
 
+### Game review
+
+`hooks/useGameReview.ts` sweeps a whole game: it builds `positions = [startFen, ...moves.map(m => m.fen)]`, scores terminal positions directly with `terminalEval` (Stockfish returns no lines on a mate, so never queue them), de-duplicates repeated positions, and searches the rest one at a time at MultiPV 2. Results stream in — the review is rebuilt every 4 completions.
+
+`lib/review.ts` is pure math and the place to change judgements. It works in **win probability, not centipawns**, using Lichess's published curves, because a 100 cp slip matters at 0.0 and doesn't at +9.0:
+
+- `winPercent(cp) = 50 + 50 * (2 / (1 + exp(-0.00368208 * cp)) - 1)`, on cp capped to ±1000.
+- `moveAccuracy(drop) = 103.1668 * exp(-0.04354 * drop) - 3.1669`, clamped 0–100.
+- Classification by win-percentage-point drop: blunder ≥ 20, mistake ≥ 10, inaccuracy ≥ 5, good ≥ 2, else excellent — overridden by `book` (in the bundled book, first 30 plies), `forced` (one legal move), and `best`/`great` (matched the engine; "great" when every alternative lost ≥ 15 points).
+- Game accuracy blends a volatility-weighted mean with a harmonic mean. `volatilityWeights` is indexed by **game half-move**, not by one side's moves — `summarize` must pick a side's accuracies and their weights out together or the two arrays silently misalign. Accuracy counts every move (theory included, matching Lichess/Chess.com); ACPL excludes book moves.
+
+`lib/coach.ts` turns a flagged move into prose. It is **deterministic and offline — there is no LLM anywhere in this app.** Every sentence is checked against the real position first, via the chess.js wrappers in `lib/chess.ts` (`attackersOf`, `piecesOn`, `pieceAt`, `inCheck`): mate won or handed over, the opponent's actual refutation, forks and double attacks, pieces left loose, material dropped, free material that was on offer. Only if no rule fires does it fall back to narrating the eval swing. Add rules the same way — check the board, don't assert.
+
 ### Feature flows
 
 - **Build**: play/analyze on the board with engine + book/explorer panels, save lines into the active repertoire.
 - **Train** (`TrainPanel`): drills every root-to-leaf line (shuffled), auto-plays the opponent's moves, and checks each user move against the expected SAN. All logic is in the provider's training section.
-- **Fix gaps** (`FixPanel`): walks the ranked gap queue, pinning the board to each gap position; picking a suggested reply saves it and advances. Prev/next walk the queue (arrow keys or the panel buttons).
+- **Fix gaps** (`FixPanel`): walks the ranked gap queue, pinning the board to each gap position; picking a suggested reply saves it and advances. ←/→ step through the moves that lead to the gap, ↑/↓ walk the queue; you can only play a reply *at* the gap (`atGap`).
+- **Move review** (`hooks/useMoveReview.ts` + `lib/classify.ts` + `lib/moveSummary.ts`): while building with the engine on, a background instance grades every move of the line you're playing and the board shows a chess.com-style reaction disc. `lib/classify.ts` owns that vocabulary (`brilliant`/`great`/`best`/…/`miss`/`blunder`) and `components/MoveClassBadge.tsx` renders it — game review reuses the same disc, since `lib/review.ts`'s classes are a subset.
+- **Review** (`GameBrowser` → `ReviewPanel` + `CoachCard` + `EvalGraph`): type a Chess.com username, pick a game, and Stockfish grades every move. The board is **yours to explore**: a move either follows the game, answers an open challenge, or forks a side line off it (`branch = { from, source }`), and the reviewed game — which lives in `reviewSession.game`, never in `line` — is always one `restoreGame()` away. `branch.from` may only ever move *down*, since navigation is unlocked and you can step back and re-fork earlier. Inside a side line the live engine takes over the eval bar and arrows, because the sweep has no data there. `lib/pgn.ts` parses the PGN, including `{[%clk …]}` clocks.
 - **Transfer/sync** (`lib/transfer.ts`, `TransferDialog.tsx`): import/export/merge repertoires between browsers via a sync code.
 
 ### Conventions
 
 - Import alias `@/*` maps to the repo root (`tsconfig.json`).
-- Chess logic goes through `chess.js` wrapped in `lib/chess.ts` (`tryMove`, `legalMoves`, SAN/UCI/FEN helpers) — use these rather than instantiating `Chess` directly.
+- Chess logic goes through `chess.js` wrapped in `lib/chess.ts` (`tryMove`, `legalMoves`, `parsePgn`, board-inspection and SAN/UCI/FEN helpers) — use these rather than instantiating `Chess` directly. `lib/chess.ts` is the only file that imports `chess.js`.

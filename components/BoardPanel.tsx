@@ -12,7 +12,8 @@ import { Chessboard } from "react-chessboard";
 import { useTrainer } from "@/context/TrainerContext";
 import { legalMoves, tryMove } from "@/lib/chess";
 import type { Classification } from "@/lib/classify";
-import type { EngineEval, EngineStatus } from "@/lib/types";
+import { terminalEval, type GameReview, type MoveClass } from "@/lib/review";
+import type { EngineEval, EngineLine, EngineStatus } from "@/lib/types";
 import { EvalBar } from "./EvalBar";
 import { MoveClassDisc } from "./MoveClassBadge";
 import { ControlButton } from "./ui";
@@ -21,6 +22,8 @@ interface Props {
   evaluation: EngineEval | null;
   engineStatus: EngineStatus;
   engineEnabled: boolean;
+  /** Set while reviewing a game, so the board can colour the move just played. */
+  review?: GameReview | null;
   /** Move reactions keyed by 0-based move index, for the on-board badge. */
   moveClasses?: Map<number, Classification>;
 }
@@ -28,6 +31,20 @@ interface Props {
 const HIGHLIGHT = "rgba(250, 204, 21, 0.45)";
 /** Right-click annotation colour (Lichess-style square marker). */
 const RED_HIGHLIGHT = "rgba(235, 66, 66, 0.6)";
+/** Square tint for a move that isn't part of the game at all. */
+const BRANCH_HIGHLIGHT = "rgba(56, 189, 248, 0.40)";
+
+/** Square tint for the move just played, by how good it was. */
+const REVIEW_TINT: Record<MoveClass, string> = {
+  blunder: "rgba(244, 63, 94, 0.45)",
+  mistake: "rgba(251, 146, 60, 0.45)",
+  inaccuracy: "rgba(251, 191, 36, 0.45)",
+  good: "rgba(148, 163, 184, 0.40)",
+  excellent: "rgba(52, 211, 153, 0.40)",
+  best: "rgba(34, 197, 94, 0.42)",
+  great: "rgba(56, 189, 248, 0.45)",
+  book: "rgba(167, 139, 250, 0.40)",
+};
 
 /** Selectable board colour schemes (light / dark square colours). */
 const BOARD_THEMES = {
@@ -49,6 +66,7 @@ export function BoardPanel({
   evaluation,
   engineStatus,
   engineEnabled,
+  review = null,
   moveClasses,
 }: Props) {
   const t = useTrainer();
@@ -62,6 +80,10 @@ export function BoardPanel({
     turn,
     session,
     fixQueue,
+    reviewSession,
+    reviewChallenge,
+    inVariation,
+    restoreGame,
     playMove,
     goStart,
     goBack,
@@ -82,8 +104,77 @@ export function BoardPanel({
   // pieces until you step forward to the gap again.
   const atGap = fixQueue === null || ply === line.length;
 
+  // Free play in review is only safe once there is a game to come back to.
+  const reviewLive = mode === "review" && reviewSession != null;
+
   const evalMatches = evaluation != null && evaluation.fen === fen;
-  const bestLine = evalMatches && evaluation.lines.length > 0 ? evaluation.lines[0] : null;
+  const liveBestLine =
+    evalMatches && evaluation.lines.length > 0 ? evaluation.lines[0] : null;
+
+  // No longer a movement gate — it only suppresses the answer arrow, including
+  // after a wrong guess, when the user can step back onto the puzzle.
+  const challengeOpen =
+    mode === "review" &&
+    reviewChallenge != null &&
+    ply === reviewChallenge.index &&
+    reviewChallenge.status !== "correct";
+
+  // The move that produced the position on the board, and its verdict. Inside a
+  // variation the moves are no longer the game's, so `review.moves[ply - 1]`
+  // would label a different move — leave it unmarked there.
+  const reviewedMove =
+    mode === "review" && review && !reviewChallenge && !inVariation && ply >= 1
+      ? review.moves[ply - 1] ?? null
+      : null;
+
+  // The live engine is parked during review, so drive the eval bar from the
+  // sweep's own numbers instead of leaving it stuck at 0.00.
+  const reviewBestLine: EngineLine | null = useMemo(() => {
+    if (mode !== "review" || inVariation || !review) return null;
+    const index = Math.min(ply, review.moves.length) - 1;
+    const move = index >= 0 ? review.moves[index] : review.moves[0];
+    if (!move) return null;
+    const scoreWhite = index >= 0 ? move.cpAfter : move.cpBefore;
+    const mate = index >= 0 ? move.mateAfter : move.mateBefore;
+    return {
+      multipv: 1,
+      depth: review.depth,
+      type: mate != null ? "mate" : "cp",
+      value: mate != null ? Math.abs(mate) : scoreWhite,
+      scoreWhite,
+      uci: "",
+      san: "",
+      pvSan: [],
+    };
+  }, [mode, inVariation, review, ply]);
+
+  // A move that ends the game leaves Stockfish nothing to search (no `pv`, so no
+  // lines), which would blank the bar at the most satisfying possible moment.
+  // Score those directly, the way the sweep already scores a game's final move.
+  const terminalLine: EngineLine | null = useMemo(() => {
+    if (mode !== "review" || !inVariation) return null;
+    const term = terminalEval(fen);
+    if (!term) return null;
+    return {
+      multipv: 1,
+      depth: 0,
+      type: term.terminal === "checkmate" ? "mate" : "cp",
+      value: 0,
+      scoreWhite: term.cpWhite,
+      uci: "",
+      san: "",
+      pvSan: [],
+    };
+  }, [mode, inVariation, fen]);
+
+  // On the game only the sweep may drive the bar — otherwise the last evaluation
+  // from build mode lingers on the identical starting position. Off the game the
+  // sweep knows nothing, so the live engine takes over. `engineEnabled` is
+  // load-bearing: useEngine keeps its last evaluation after being disabled.
+  const bestLine =
+    mode === "review"
+      ? reviewBestLine ?? terminalLine ?? (engineEnabled ? liveBestLine : null)
+      : liveBestLine;
 
   // Resizable board widget (persisted across sessions).
   const [size, setSize] = useState(DEFAULT_BOARD);
@@ -152,14 +243,19 @@ export function BoardPanel({
     window.addEventListener("pointerup", onUp);
   };
 
-  // Keyboard navigation (build mode only; not while a fix is locked to a gap).
+  // Keyboard navigation (not in training, where the board is pinned to a drill).
   useEffect(() => {
-    if (mode !== "build") return;
+    if (mode === "train") return;
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement;
       if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
       if (e.key === "f") {
         flipBoard();
+        return;
+      }
+      if (e.key === "Escape") {
+        // Bail out of a side line back onto the game.
+        if (mode === "review" && inVariation) restoreGame();
         return;
       }
       // During a fix the board is pinned to each gap. Left/right step through the
@@ -180,18 +276,39 @@ export function BoardPanel({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [mode, navLocked, fixQueue, prevFix, nextFix, goBack, goForward, goStart, goEnd, flipBoard]);
+  }, [
+    mode,
+    navLocked,
+    fixQueue,
+    inVariation,
+    restoreGame,
+    prevFix,
+    nextFix,
+    goBack,
+    goForward,
+    goStart,
+    goEnd,
+    flipBoard,
+  ]);
 
   const userChar = session ? (session.color === "white" ? "w" : "b") : null;
 
+  const offGame = mode === "review" && inVariation;
   const highlightStyles = useMemo(() => {
     const styles: Record<string, CSSProperties> = {};
     if (lastMove) {
-      styles[lastMove.from] = { background: HIGHLIGHT };
-      styles[lastMove.to] = { background: HIGHLIGHT };
+      // In review, colour the last move by how good it was — unless it isn't the
+      // game's move at all, which gets the "this is a side line" sky tint.
+      const tint = reviewedMove
+        ? REVIEW_TINT[reviewedMove.classification]
+        : offGame
+          ? BRANCH_HIGHLIGHT
+          : HIGHLIGHT;
+      styles[lastMove.from] = { background: tint };
+      styles[lastMove.to] = { background: tint };
     }
     return styles;
-  }, [lastMove]);
+  }, [lastMove, reviewedMove, offGame]);
 
   // Click / tap to move: first tap selects a piece, second tap moves it.
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
@@ -229,8 +346,18 @@ export function BoardPanel({
     return styles;
   }, [moveFrom, fen]);
 
-  // Arrows: engine suggestions in build mode; revealed answers in train mode.
+  // Arrows: engine suggestions in build mode; revealed answers in train mode;
+  // the move you should have played in review mode.
   const arrows = useMemo(() => {
+    const engineArrows = () => {
+      if (!engineEnabled || !evalMatches) return [];
+      const palette = ["#22c55e", "#38bdf8", "#a78bfa"];
+      return evaluation!.lines.slice(0, 3).map((l, i) => ({
+        startSquare: l.uci.slice(0, 2),
+        endSquare: l.uci.slice(2, 4),
+        color: palette[i] ?? "#64748b",
+      }));
+    };
     let raw: { startSquare: string; endSquare: string; color: string }[];
     if (mode === "train") {
       const targetLine = session?.lines[session.lineIndex];
@@ -239,14 +366,22 @@ export function BoardPanel({
       const mv = tryMove(fen, expected);
       if (!mv) return [];
       raw = [{ startSquare: mv.from, endSquare: mv.to, color: "#22c55e" }];
+    } else if (mode === "review") {
+      // Never draw the answer while it's still being asked for — including after
+      // a wrong guess, when the user can step back onto the puzzle.
+      if (challengeOpen) return [];
+      if (inVariation) {
+        // Off the game the sweep's arrow describes a move that isn't there.
+        raw = engineArrows();
+      } else {
+        if (!reviewedMove?.bestSan || reviewedMove.bestSan === reviewedMove.san)
+          return [];
+        const best = tryMove(reviewedMove.fenBefore, reviewedMove.bestSan);
+        if (!best) return [];
+        raw = [{ startSquare: best.from, endSquare: best.to, color: "#22c55e" }];
+      }
     } else {
-      if (!engineEnabled || !evalMatches) return [];
-      const palette = ["#22c55e", "#38bdf8", "#a78bfa"];
-      raw = evaluation!.lines.slice(0, 3).map((l, i) => ({
-        startSquare: l.uci.slice(0, 2),
-        endSquare: l.uci.slice(2, 4),
-        color: palette[i] ?? "#64748b",
-      }));
+      raw = engineArrows();
     }
     // Two PV lines can transiently share a first move — keep one arrow per square pair.
     const seen = new Set<string>();
@@ -256,11 +391,18 @@ export function BoardPanel({
       seen.add(k);
       return true;
     });
-  }, [mode, session, ply, fen, engineEnabled, evalMatches, evaluation]);
-
-  // The last move's reaction badge (chess.com-style), shown while review is on.
-  const badgeSquare = lastMove?.to ?? null;
-  const badgeClass = lastMove ? moveClasses?.get(ply - 1)?.cls ?? null : null;
+  }, [
+    mode,
+    session,
+    ply,
+    fen,
+    engineEnabled,
+    evalMatches,
+    evaluation,
+    inVariation,
+    reviewedMove,
+    challengeOpen,
+  ]);
 
   // Merge move highlights with the click-to-move option dots; also reused by the
   // custom square renderer below (which replaces the board's default squares).
@@ -268,6 +410,23 @@ export function BoardPanel({
     () => ({ ...highlightStyles, ...redStyles, ...optionSquares }),
     [highlightStyles, redStyles, optionSquares],
   );
+
+  // The last move's reaction badge (chess.com-style). Two sources feed it: while
+  // reviewing a game it's the sweep's verdict on that move, and everywhere else
+  // it's the live move-review's reaction. Review's classes are a subset of the
+  // classifier's, so both render through the same disc.
+  const badgeSquare = lastMove
+    ? mode === "review"
+      ? reviewedMove
+        ? lastMove.to
+        : null
+      : lastMove.to
+    : null;
+  const badgeClass: MoveClass | Classification["cls"] | null = !lastMove
+    ? null
+    : mode === "review"
+      ? reviewedMove?.classification ?? null
+      : moveClasses?.get(ply - 1)?.cls ?? null;
 
   // Draw the reaction badge on the last move's destination square. Providing a
   // squareRenderer replaces the board's default square content, so it re-applies
@@ -317,6 +476,10 @@ export function BoardPanel({
           if (!userChar) return false;
           return piece.pieceType[0] === userChar && turn === userChar;
         }
+        // Reviewing: the board is yours to explore — your moves only ever fork a
+        // side line, and the game stays intact underneath. With no game loaded
+        // there is nothing to fork or come back to, so the board stays inert.
+        if (mode === "review") return reviewLive && piece.pieceType[0] === turn;
         // While fixing, you can only make your reply at the gap — not while
         // reviewing an earlier move.
         return atGap;
@@ -368,7 +531,9 @@ export function BoardPanel({
           atGap &&
           (mode === "train"
             ? userChar != null && pc === userChar && turn === userChar
-            : pc === turn);
+            : mode === "review"
+              ? reviewLive && pc === turn
+              : pc === turn);
         setMoveFrom(canSelect ? square : null);
       },
       // Right-click toggles a red marker on the square (right-drag still draws
@@ -394,6 +559,7 @@ export function BoardPanel({
       turn,
       playMove,
       moveFrom,
+      reviewLive,
       atGap,
     ],
   );
@@ -455,9 +621,19 @@ export function BoardPanel({
         <ControlButton onClick={flipBoard} title="Flip board (f)">
           ⇅ Flip
         </ControlButton>
-        <ControlButton onClick={resetBoard} disabled={navLocked} title="Reset to start">
-          ↺ Reset
-        </ControlButton>
+        {reviewLive ? (
+          <ControlButton
+            onClick={() => restoreGame()}
+            disabled={!inVariation}
+            title="Put the reviewed game back on the board (Esc)"
+          >
+            ↩ Back to the game
+          </ControlButton>
+        ) : (
+          <ControlButton onClick={resetBoard} disabled={navLocked} title="Reset to start">
+            ↺ Reset
+          </ControlButton>
+        )}
 
         <div className="mx-1 h-5 w-px bg-slate-700" />
         <div className="flex items-center gap-1" role="group" aria-label="Board colour">
@@ -486,7 +662,19 @@ export function BoardPanel({
         </div>
 
         <div className="ml-auto text-xs text-slate-400">
-          <EngineStatusBadge status={engineStatus} enabled={engineEnabled} evaluation={evalMatches ? evaluation : null} />
+          {mode === "review" && !inVariation ? (
+            <span className="text-slate-500">
+              {review
+                ? `Reviewed at depth ${review.depth}`
+                : "Review engine starting…"}
+            </span>
+          ) : (
+            <EngineStatusBadge
+              status={engineStatus}
+              enabled={engineEnabled}
+              evaluation={evalMatches ? evaluation : null}
+            />
+          )}
         </div>
       </div>
     </div>

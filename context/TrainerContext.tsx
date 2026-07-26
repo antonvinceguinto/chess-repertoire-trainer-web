@@ -34,8 +34,27 @@ import {
   saveRepertoires,
   setComment,
 } from "@/lib/repertoire";
+import { loadGame } from "@/lib/pgn";
+import type { ChessComGame } from "@/lib/chesscom";
+import { colorOf } from "@/lib/chesscom";
+import type { ReviewChallenge, ReviewSession } from "@/lib/review";
 import { mergeRepertoires } from "@/lib/transfer";
 import { reshuffleLines, shuffle } from "@/lib/shuffle";
+
+/** Who built the side line currently on the board in review mode. */
+export type BranchSource = "engine" | "user";
+
+/**
+ * A side line replacing the tail of the reviewed game. `from` is the number of
+ * game half-moves still intact at the head of `line`, i.e. `line.slice(0, from)`
+ * equals `game.moves.slice(0, from)`. It may only ever move *down* while the
+ * branch lives: navigation is unlocked in review, so the user can step back
+ * before the fork and play there instead.
+ */
+interface ReviewBranch {
+  from: number;
+  source: BranchSource;
+}
 
 interface TrainerContextValue {
   // Position
@@ -104,6 +123,30 @@ interface TrainerContextValue {
   nextFix: () => void;
   skipFix: () => void;
   endFix: () => void;
+
+  // Game review (your own Chess.com games)
+  reviewSession: ReviewSession | null;
+  /** Load a downloaded game onto the board. Returns false if its PGN is unreadable. */
+  startReview: (source: ChessComGame, username: string) => boolean;
+  /** Put the reviewed game away but stay on the game list. */
+  closeReviewGame: () => void;
+  /** Leave review mode entirely and go back to building. */
+  exitReview: () => void;
+  /** Ply the board is on, expressed as the half-move index the review lists. */
+  reviewChallenge: ReviewChallenge | null;
+  /** Park the board before move `index` and ask the user to find `bestSan`. */
+  startChallenge: (index: number, bestSan: string) => void;
+  endChallenge: () => void;
+  /** Play a variation onto the board from `fromPly`, keeping the game restorable. */
+  playVariation: (fromPly: number, sans: string[]) => void;
+  /** True while a side line — the engine's or your own — has replaced part of the game. */
+  inVariation: boolean;
+  /** Half-move the side line forked from the game at; null when the game itself is up. */
+  variationFrom: number | null;
+  /** Who built the current side line; null when the game itself is up. */
+  branchSource: BranchSource | null;
+  /** Put the reviewed game back on the board at `ply`. */
+  restoreGame: (ply?: number) => void;
 }
 
 const TrainerContext = createContext<TrainerContextValue | null>(null);
@@ -149,8 +192,15 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   // Latest "save this reply & advance" handler, or null when not fixing — lets
   // playMove (defined earlier) route a board move through the fix flow.
   const fixSaveRef = useRef<((mv: LineMove) => void) | null>(null);
+  // Game review: the loaded game, the "find the better move" prompt, and the
+  // side line branched off it (null when the game itself is up).
+  const [reviewSession, setReviewSession] = useState<ReviewSession | null>(null);
+  const [reviewChallenge, setReviewChallenge] =
+    useState<ReviewChallenge | null>(null);
+  const [branch, setBranch] = useState<ReviewBranch | null>(null);
 
   const fen = fenAtPly(line, ply);
+  const variationFrom = branch?.from ?? null;
   const turn = turnOf(fen);
   const lastMove = ply > 0 ? line[ply - 1] : null;
   // The board can scrub back (via ←/→) to review how a gap arose while fixing;
@@ -206,6 +256,13 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+
+  /** Drop everything about a reviewed game (any other mode takes the board). */
+  const clearReview = useCallback(() => {
+    setReviewSession(null);
+    setReviewChallenge(null);
+    setBranch(null);
+  }, []);
 
   const advanceWith = useCallback(
     (mv: LineMove) => {
@@ -290,12 +347,19 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------------- Navigation ---------------- */
 
+  // Latest "check this against the engine's move" handler for review mode, or
+  // null outside it — same indirection trick as fixSaveRef.
+  const reviewMoveRef = useRef<((mv: LineMove) => boolean) | null>(null);
+
   const playMove = useCallback(
     (input: MoveInput | string): boolean => {
       stopAnimation();
       const mv = tryMove(fen, input);
       if (!mv) return false;
       if (mode === "train") return handleTrainMove(mv);
+      // Reviewing a finished game: the move follows the game, answers an open
+      // challenge, or forks your own line off it — handleReviewMove decides.
+      if (mode === "review") return reviewMoveRef.current?.(mv) ?? false;
       // During a guided fix the board is pinned to the gap. A move made *at* the
       // gap is your reply — save it and advance. While scrubbed back reviewing an
       // earlier move (via ←) the board is read-only, so ignore the move.
@@ -378,9 +442,20 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   );
   const resetBoard = useCallback(() => {
     stopAnimation();
+    // In review the board belongs to the loaded game: "reset" means its first
+    // position, never an empty board.
+    if (mode === "review") {
+      const game = reviewSession?.game;
+      if (!game) return;
+      setReviewChallenge(null);
+      setLine(game.moves);
+      setBranch(null);
+      setPly(0);
+      return;
+    }
     setLine([]);
     setPly(0);
-  }, [stopAnimation]);
+  }, [mode, reviewSession, stopAnimation]);
 
   /* ---------------- Repertoire management ---------------- */
 
@@ -501,9 +576,10 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       stopAnimation();
       setFixQueue(null);
       setModeState(m);
+      if (m !== "review") clearReview();
       if (m === "build") setSession(null);
     },
-    [stopAnimation],
+    [stopAnimation, clearReview],
   );
 
   // `lineSans` is the (thoroughness-filtered) set of lines to drill; the caller
@@ -514,6 +590,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       if (!rep) return;
       stopAnimation();
       setFixQueue(null);
+      clearReview();
       // Random order, but a full shuffled pass covers every line before a repeat.
       const lines = shuffle(lineSans);
       setLine([]);
@@ -532,7 +609,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
         lineIndex: 0,
       });
     },
-    [activeRepertoire, stopAnimation],
+    [activeRepertoire, stopAnimation, clearReview],
   );
 
   // Fresh random pass over the current session's lines (no re-filtering needed).
@@ -631,13 +708,14 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       stopAnimation();
       setModeState("build");
       setSession(null);
+      clearReview();
       setFixQueue(paths);
       setFixIndex(0);
       // Play the moves into the first gap one by one so you see how the position
       // arises, rather than snapping the board to a mid-game position.
       playLineSans(paths[0]);
     },
-    [stopAnimation, playLineSans],
+    [stopAnimation, playLineSans, clearReview],
   );
 
   // Jump to a specific gap in the queue. The index is clamped to the queue; an
@@ -703,6 +781,173 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     setPly(0);
   }, []);
 
+  /* ---------------- Game review ---------------- */
+
+  /**
+   * Put a downloaded game on the board and switch to review mode. The board
+   * starts at move 0 so the eval graph and summary read from the beginning.
+   */
+  const startReview = useCallback(
+    (source: ChessComGame, username: string): boolean => {
+      const game = loadGame(source.pgn);
+      if (!game) return false;
+      stopAnimation();
+      setSession(null);
+      setFixQueue(null);
+      setReviewChallenge(null);
+      setBranch(null);
+      setModeState("review");
+      const color = colorOf(source, username) ?? "white";
+      setReviewSession({ source, game, color, username });
+      setOrientation(color);
+      setLine(game.moves);
+      setPly(0);
+      return true;
+    },
+    [stopAnimation],
+  );
+
+  // Back to the game list: drop the game, keep the user in review mode.
+  const closeReviewGame = useCallback(() => {
+    stopAnimation();
+    clearReview();
+    setLine([]);
+    setPly(0);
+  }, [stopAnimation, clearReview]);
+
+  const exitReview = useCallback(() => {
+    if (mode !== "review") return;
+    stopAnimation();
+    clearReview();
+    setModeState("build");
+    setLine([]);
+    setPly(0);
+  }, [mode, stopAnimation, clearReview]);
+
+  /** Put the reviewed game back on the board, dropping any side line. */
+  const restoreGame = useCallback(
+    (toPly?: number) => {
+      const game = reviewSession?.game;
+      if (!game) return;
+      stopAnimation();
+      setReviewChallenge(null);
+      setLine(game.moves);
+      setPly(
+        Math.max(0, Math.min(game.moves.length, toPly ?? variationFrom ?? 0)),
+      );
+      setBranch(null);
+    },
+    [reviewSession, variationFrom, stopAnimation],
+  );
+
+  // Park the board on the position *before* a flagged move and wait for an
+  // answer. Doubles as "try again": it re-parks and re-arms from any state.
+  const startChallenge = useCallback(
+    (index: number, bestSan: string) => {
+      const game = reviewSession?.game;
+      if (!game) return;
+      stopAnimation();
+      setBranch(null);
+      setLine(game.moves);
+      setPly(index);
+      setReviewChallenge({ index, bestSan, status: "waiting", lastWrong: null });
+    },
+    [reviewSession, stopAnimation],
+  );
+
+  // Dismissing a challenge throws the attempt away, puts the real game back and
+  // steps onto the flagged move itself, so the coach keeps talking about it
+  // rather than the opponent's previous move. Restoring is not optional: once an
+  // answer is committed, `index` holds the user's move, not the game's.
+  const endChallenge = useCallback(() => {
+    const index = reviewChallenge?.index;
+    setReviewChallenge(null);
+    restoreGame(index != null ? index + 1 : undefined);
+  }, [reviewChallenge, restoreGame]);
+
+  /**
+   * A board move while reviewing. The reviewed game is never touched — it lives
+   * in `reviewSession.game.moves` and `restoreGame` always puts it back — so a
+   * move here either follows the game, answers an open challenge, or forks your
+   * own line off it. Either way it is *committed*: react-chessboard renders from
+   * the `position` prop, so a move that never reaches `line` snaps straight back.
+   */
+  const handleReviewMove = useCallback(
+    (mv: LineMove): boolean => {
+      // No game loaded (the game list is up): nothing to fork off, and
+      // restoreGame would be a no-op, so keep the board inert.
+      if (!reviewSession) return false;
+
+      // Only a move played *from* the challenge position is an answer; anything
+      // else is ordinary exploration and leaves the challenge armed.
+      const challenge = reviewChallenge;
+      if (challenge && ply === challenge.index) {
+        setReviewChallenge((c) =>
+          c
+            ? mv.san === c.bestSan
+              ? { ...c, status: "correct", lastWrong: null }
+              : { ...c, status: "wrong", lastWrong: mv.san }
+            : c,
+        );
+      }
+
+      // Exactly advanceWith's own rule: replaying the move already in front of
+      // the cursor leaves `line` untouched and only steps the cursor, so walking
+      // the game (or the engine's line) by dragging must not invent a branch.
+      const branched = !(ply < line.length && line[ply].san === mv.san);
+      advanceWith(mv);
+      if (branched) {
+        // advanceWith truncates at `ply`, so the fork is at most `ply`. Never
+        // raise it: restoreGame() defaults to it, and everything that indexes
+        // the game by it would otherwise land inside the discarded branch.
+        setBranch((b) => ({
+          from: b === null ? ply : Math.min(b.from, ply),
+          source: "user",
+        }));
+      }
+      return true;
+    },
+    [reviewSession, reviewChallenge, ply, line, advanceWith],
+  );
+
+  reviewMoveRef.current = mode === "review" ? handleReviewMove : null;
+
+  /**
+   * Branch a line off the reviewed game and play it out, so "here's what you
+   * should have done" is something you watch rather than read.
+   */
+  const playVariation = useCallback(
+    (fromPly: number, sans: string[]) => {
+      const base = reviewSession ? reviewSession.game.moves : line;
+      stopAnimation();
+      setReviewChallenge(null);
+
+      let f = fenAtPly(base, fromPly);
+      const extra: LineMove[] = [];
+      for (const san of sans) {
+        const mv = tryMove(f, san);
+        if (!mv) break;
+        extra.push(mv);
+        f = mv.fen;
+      }
+      if (extra.length === 0) return;
+
+      setLine([...base.slice(0, fromPly), ...extra]);
+      setBranch({ from: fromPly, source: "engine" });
+      setPly(fromPly);
+
+      const total = fromPly + extra.length;
+      let current = fromPly;
+      const step = () => {
+        current += 1;
+        setPly(current);
+        animRef.current = current < total ? setTimeout(step, LINE_ANIM_MS) : null;
+      };
+      animRef.current = setTimeout(step, LINE_ANIM_START_MS);
+    },
+    [reviewSession, line, stopAnimation],
+  );
+
   const value: TrainerContextValue = {
     line,
     ply,
@@ -754,6 +999,18 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     nextFix,
     skipFix,
     endFix,
+    reviewSession,
+    startReview,
+    closeReviewGame,
+    exitReview,
+    reviewChallenge,
+    startChallenge,
+    endChallenge,
+    playVariation,
+    inVariation: branch !== null,
+    variationFrom,
+    branchSource: branch?.source ?? null,
+    restoreGame,
   };
 
   return (

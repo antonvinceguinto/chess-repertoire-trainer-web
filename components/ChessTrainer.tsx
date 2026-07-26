@@ -5,7 +5,14 @@ import { useTrainer } from "@/context/TrainerContext";
 import { useEngine } from "@/hooks/useEngine";
 import { useCoverage } from "@/hooks/useCoverage";
 import { useBookData } from "@/hooks/useBookData";
+import {
+  DEFAULT_REVIEW_DEPTH,
+  depthFor,
+  useGameReview,
+  type ReviewDepthId,
+} from "@/hooks/useGameReview";
 import { useMoveReview } from "@/hooks/useMoveReview";
+import type { ChessComGame } from "@/lib/chesscom";
 import { importantLines } from "@/lib/lines";
 import { enumerateLines } from "@/lib/repertoire";
 import {
@@ -14,13 +21,16 @@ import {
   THOROUGHNESS_KEY,
   type Thoroughness,
 } from "@/lib/thoroughness";
+import type { Mode } from "@/lib/types";
 import { BoardPanel } from "./BoardPanel";
 import { MoveList } from "./MoveList";
 import { EnginePanel } from "./EnginePanel";
 import { BookPanel } from "./BookPanel";
 import { CoveragePanel } from "./CoveragePanel";
+import { GameBrowser } from "./GameBrowser";
 import { RepertoireSelect } from "./RepertoireSelect";
 import { RepertoirePanel } from "./RepertoirePanel";
+import { ReviewPanel } from "./ReviewPanel";
 import { TrainPanel } from "./TrainPanel";
 import { FixPanel } from "./FixPanel";
 
@@ -42,6 +52,11 @@ export function ChessTrainer() {
     stopTraining,
     fixQueue,
     startFix,
+    setMode,
+    reviewSession,
+    startReview,
+    exitReview,
+    inVariation,
   } = useTrainer();
   const book = useBookData();
 
@@ -49,6 +64,9 @@ export function ChessTrainer() {
   const [reviewOn, setReviewOnState] = useState(true);
   const [multipv, setMultipv] = useState(3);
   const [tab, setTab] = useState<Tab>("analysis");
+  const [reviewDepth, setReviewDepth] =
+    useState<ReviewDepthId>(DEFAULT_REVIEW_DEPTH);
+  const [gameLoadError, setGameLoadError] = useState<string | null>(null);
   const [thoroughness, setThoroughness] = useState<Thoroughness>(
     DEFAULT_THOROUGHNESS,
   );
@@ -136,14 +154,23 @@ export function ChessTrainer() {
   // the worker). Turning it off is a global, persisted choice that drops the
   // whole app into a book-only workflow (gap-fixing included) — nothing here
   // re-enables it behind the user's back.
-  const engineEnabled = engineOn && hydrated && mode === "build";
+  //
+  // Review is the one exception, and only inside a side line: the whole mode is
+  // engine-driven (the sweep below ignores `engineOn` too), the sweep has no
+  // data off the game, and the toggle lives in a panel review doesn't render.
+  const engineEnabled =
+    (engineOn && hydrated && mode === "build") ||
+    (mode === "review" && inVariation);
   const { status, evaluation } = useEngine(fen, engineEnabled, multipv);
 
   // Move review runs its own background engine to grade every move in the
   // current line — only while building with the engine on (not during a fix).
   // Both sides are graded: while building you play the whole line yourself, and
   // an opponent's blunder is exactly what the review should surface.
-  const reviewEnabled = engineEnabled && reviewOn && !fixQueue;
+  // `mode === "build"` is explicit because engineEnabled is now also true inside
+  // a review side line, and grading the board there is the game review's job.
+  const reviewEnabled =
+    engineEnabled && mode === "build" && reviewOn && !fixQueue;
   const review = useMoveReview(line, reviewEnabled, book);
 
   const {
@@ -153,14 +180,37 @@ export function ChessTrainer() {
     error: gapsError,
   } = useCoverage(activeRepertoire, minImportanceFor(thoroughness));
 
+  // Whole-game review runs on its own Stockfish instance, so it never competes
+  // with the live analysis engine above. Named `gameReview` to keep it distinct
+  // from `review` above, which is the per-move grading of the build-mode line.
+  const { review: gameReview, progress: reviewProgress } = useGameReview(
+    reviewSession?.game ?? null,
+    mode === "review",
+    depthFor(reviewDepth),
+    book,
+  );
+
   // Tapping a single gap row reproduces it as a one-gap guided fix: the board
   // pins to the position and the suggested replies are one tap from being saved.
   const prepareGap = (sans: string[]) => {
     startFix([sans]);
   };
 
+  const openGame = (game: ChessComGame, username: string) => {
+    setGameLoadError(
+      startReview(game, username)
+        ? null
+        : "That game's PGN couldn't be read — try another one.",
+    );
+  };
+
+  const goBuild = () => {
+    exitReview();
+    stopTraining();
+  };
+
   // The opening book sits in its own left column while building; during
-  // training / gap-fixing the board takes over that space.
+  // training / gap-fixing / review the board takes over that space.
   const buildBoard = mode === "build" && !fixQueue;
   const showBook = buildBoard && !bookHidden;
 
@@ -169,8 +219,9 @@ export function ChessTrainer() {
       <Header
         mode={mode}
         canTrain={!!activeRepertoire}
-        onBuild={stopTraining}
+        onBuild={goBuild}
         onTrain={() => startTraining(trainableLines)}
+        onReview={() => setMode("review")}
       />
 
       <div
@@ -208,15 +259,27 @@ export function ChessTrainer() {
             evaluation={evaluation}
             engineStatus={status}
             engineEnabled={engineEnabled}
+            review={mode === "review" ? gameReview : null}
             moveClasses={reviewEnabled ? review.classes : undefined}
           />
         </div>
 
         {/* Right column: panels */}
         <div className="order-2 flex flex-col gap-3 xl:order-3">
-          <RepertoireSelect />
+          {mode !== "review" && <RepertoireSelect />}
 
-          {mode === "train" ? (
+          {mode === "review" ? (
+            reviewSession ? (
+              <ReviewPanel
+                review={gameReview}
+                progress={reviewProgress}
+                depthId={reviewDepth}
+                onDepthChange={setReviewDepth}
+              />
+            ) : (
+              <GameBrowser onSelect={openGame} loadError={gameLoadError} />
+            )
+          ) : mode === "train" ? (
             <TrainPanel
               level={thoroughness}
               onLevelChange={changeTrainLevel}
@@ -296,12 +359,19 @@ function Header({
   canTrain,
   onBuild,
   onTrain,
+  onReview,
 }: {
-  mode: "build" | "train";
+  mode: Mode;
   canTrain: boolean;
   onBuild: () => void;
   onTrain: () => void;
+  onReview: () => void;
 }) {
+  const tab = (active: boolean) =>
+    `rounded-md px-3 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+      active ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-slate-200"
+    }`;
+
   return (
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div>
@@ -309,21 +379,13 @@ function Header({
           <span className="text-2xl">♞</span> Opening Trainer
         </h1>
         <p className="text-xs text-slate-500">
-          Build your repertoire with Stockfish &amp; the Lichess explorer, then
-          drill it from memory.
+          Build your repertoire with Stockfish &amp; the Lichess explorer, drill
+          it from memory, then review your real games.
         </p>
       </div>
 
       <div className="flex rounded-lg border border-slate-700 bg-slate-900 p-1">
-        <button
-          type="button"
-          onClick={onBuild}
-          className={`rounded-md px-4 py-1.5 text-sm font-semibold transition ${
-            mode === "build"
-              ? "bg-emerald-600 text-white"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
+        <button type="button" onClick={onBuild} className={tab(mode === "build")}>
           🛠 Build
         </button>
         <button
@@ -331,13 +393,17 @@ function Header({
           onClick={onTrain}
           disabled={!canTrain}
           title={canTrain ? "Train this repertoire" : "Create a repertoire first"}
-          className={`rounded-md px-4 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
-            mode === "train"
-              ? "bg-emerald-600 text-white"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
+          className={tab(mode === "train")}
         >
           🎯 Train
+        </button>
+        <button
+          type="button"
+          onClick={onReview}
+          title="Analyse your own Chess.com games"
+          className={tab(mode === "review")}
+        >
+          🔍 Review
         </button>
       </div>
     </header>
@@ -348,7 +414,8 @@ function Footer() {
   return (
     <footer className="mt-6 text-center text-[11px] text-slate-600">
       Analysis by Stockfish 18 (WASM, in-browser). Opening statistics from the
-      Lichess opening explorer. Repertoires are saved locally in your browser.
+      Lichess opening explorer. Game history from the public Chess.com API.
+      Repertoires are saved locally in your browser.
     </footer>
   );
 }

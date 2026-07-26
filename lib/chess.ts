@@ -111,6 +111,80 @@ export function nodeToLineMove(node: RepNode): LineMove {
   };
 }
 
+/** Terminal state of a position, used to score the end of an analysed game. */
+export type PositionStatus = "checkmate" | "stalemate" | "draw" | "ok";
+
+export function positionStatus(fen: string): PositionStatus {
+  const chess = new Chess(fen);
+  if (chess.isCheckmate()) return "checkmate";
+  if (chess.isStalemate()) return "stalemate";
+  if (chess.isDraw()) return "draw";
+  return "ok";
+}
+
+/** Whether the side to move is in check. */
+export function inCheck(fen: string): boolean {
+  return new Chess(fen).isCheck();
+}
+
+/** The piece on a square ("wq", "bn", …) or null when empty. */
+export function pieceAt(fen: string, square: string): string | null {
+  const p = new Chess(fen).get(square as Square);
+  return p ? `${p.color}${p.type}` : null;
+}
+
+/**
+ * Squares holding a piece of `attackedBy` that attack `square`.
+ * chess.js reports these ignoring pins, which is what we want for spotting
+ * "this piece is hanging" style coaching hints.
+ */
+export function attackersOf(
+  fen: string,
+  square: string,
+  attackedBy: Turn,
+): string[] {
+  return new Chess(fen).attackers(square as Square, attackedBy);
+}
+
+/** Every piece on the board as { square, piece: "wq" } entries. */
+export function piecesOn(fen: string): { square: string; piece: string }[] {
+  const out: { square: string; piece: string }[] = [];
+  for (const row of new Chess(fen).board()) {
+    for (const cell of row) {
+      if (cell) out.push({ square: cell.square, piece: `${cell.color}${cell.type}` });
+    }
+  }
+  return out;
+}
+
+/** Parsed contents of a PGN: tag pairs, the move list, and inline comments. */
+export interface PgnGame {
+  headers: Record<string, string>;
+  moves: LineMove[];
+  /** Comments, each keyed by the FEN of the position it follows. */
+  comments: { fen: string; comment: string }[];
+  /** Position the game started from (differs from START_FEN for setups). */
+  startFen: string;
+}
+
+/** Parse a PGN into line moves. Returns null if it can't be read. */
+export function parsePgn(pgn: string): PgnGame | null {
+  const chess = new Chess();
+  try {
+    chess.loadPgn(pgn, { strict: false });
+  } catch {
+    return null;
+  }
+  const history = chess.history({ verbose: true });
+  const headers = chess.getHeaders();
+  return {
+    headers,
+    moves: history.map(toLineMove),
+    comments: chess.getComments(),
+    startFen: history[0]?.before ?? headers.FEN ?? START_FEN,
+  };
+}
+
 /** English ordinal for a positive integer: 1→"1st", 2→"2nd", 3→"3rd", 11→"11th". */
 export function ordinal(n: number): string {
   const rem100 = n % 100;
