@@ -11,6 +11,7 @@ import {
 import { Chessboard } from "react-chessboard";
 import { useTrainer } from "@/context/TrainerContext";
 import { legalMoves, tryMove } from "@/lib/chess";
+import type { Classification } from "@/lib/classify";
 import { terminalEval, type GameReview, type MoveClass } from "@/lib/review";
 import type { EngineEval, EngineLine, EngineStatus } from "@/lib/types";
 import { EvalBar } from "./EvalBar";
@@ -23,9 +24,13 @@ interface Props {
   engineEnabled: boolean;
   /** Set while reviewing a game, so the board can colour the move just played. */
   review?: GameReview | null;
+  /** Move reactions keyed by 0-based move index, for the on-board badge. */
+  moveClasses?: Map<number, Classification>;
 }
 
 const HIGHLIGHT = "rgba(250, 204, 21, 0.45)";
+/** Right-click annotation colour (Lichess-style square marker). */
+const RED_HIGHLIGHT = "rgba(235, 66, 66, 0.6)";
 /** Square tint for a move that isn't part of the game at all. */
 const BRANCH_HIGHLIGHT = "rgba(56, 189, 248, 0.40)";
 
@@ -62,11 +67,13 @@ export function BoardPanel({
   engineStatus,
   engineEnabled,
   review = null,
+  moveClasses,
 }: Props) {
   const t = useTrainer();
   const {
     fen,
     ply,
+    line,
     orientation,
     lastMove,
     mode,
@@ -88,8 +95,14 @@ export function BoardPanel({
     resetBoard,
   } = t;
 
-  // While guiding a gap fix, the board must stay on the gap position.
+  // While guiding a gap fix, the board must stay on the gap position (no free
+  // play or reset). Stepping ←/→ through the line's moves to review it is still
+  // allowed — only training locks that out.
   const navLocked = mode === "train" || fixQueue !== null;
+  const moveNavLocked = mode === "train";
+  // The gap sits at the end of `line`; scrubbed back to review, you can't grab
+  // pieces until you step forward to the gap again.
+  const atGap = fixQueue === null || ply === line.length;
 
   // Free play in review is only safe once there is a game to come back to.
   const reviewLive = mode === "review" && reviewSession != null;
@@ -245,11 +258,14 @@ export function BoardPanel({
         if (mode === "review" && inVariation) restoreGame();
         return;
       }
-      // During a fix the board is pinned to each gap, so left/right walk the gap
-      // queue (previous / next) rather than the moves of a single line.
+      // During a fix the board is pinned to each gap. Left/right step through the
+      // moves that lead to the gap (to review how it arose); up/down walk the gap
+      // queue (previous / next).
       if (fixQueue !== null) {
-        if (e.key === "ArrowLeft") prevFix();
-        else if (e.key === "ArrowRight") nextFix();
+        if (e.key === "ArrowLeft") goBack();
+        else if (e.key === "ArrowRight") goForward();
+        else if (e.key === "ArrowUp") prevFix();
+        else if (e.key === "ArrowDown") nextFix();
         return;
       }
       if (navLocked) return; // keep the board pinned during training
@@ -296,9 +312,18 @@ export function BoardPanel({
 
   // Click / tap to move: first tap selects a piece, second tap moves it.
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
+  // Right-click square annotations (red markers), cleared when the position changes.
+  const [redSquares, setRedSquares] = useState<Set<string>>(new Set());
   useEffect(() => {
     setMoveFrom(null);
+    setRedSquares(new Set());
   }, [fen]);
+
+  const redStyles = useMemo(() => {
+    const styles: Record<string, CSSProperties> = {};
+    for (const sq of redSquares) styles[sq] = { background: RED_HIGHLIGHT };
+    return styles;
+  }, [redSquares]);
 
   // Highlight the selected square and dots on its legal destinations.
   const optionSquares = useMemo(() => {
@@ -379,37 +404,45 @@ export function BoardPanel({
     challengeOpen,
   ]);
 
-  // Merge the move highlight with the click-to-move option dots. Also reused by
-  // the square renderer below, which replaces the board's default squares.
+  // Merge move highlights with the click-to-move option dots; also reused by the
+  // custom square renderer below (which replaces the board's default squares).
   const squareStyles = useMemo(
-    () => ({ ...highlightStyles, ...optionSquares }),
-    [highlightStyles, optionSquares],
+    () => ({ ...highlightStyles, ...redStyles, ...optionSquares }),
+    [highlightStyles, redStyles, optionSquares],
   );
 
-  // The verdict badge for the move just played, on its destination square.
-  const badgeSquare = reviewedMove && lastMove ? lastMove.to : null;
-  const badgeClass = reviewedMove?.classification ?? null;
+  // The last move's reaction badge (chess.com-style). Two sources feed it: while
+  // reviewing a game it's the sweep's verdict on that move, and everywhere else
+  // it's the live move-review's reaction. Review's classes are a subset of the
+  // classifier's, so both render through the same disc.
+  const badgeSquare = lastMove
+    ? mode === "review"
+      ? reviewedMove
+        ? lastMove.to
+        : null
+      : lastMove.to
+    : null;
+  const badgeClass: MoveClass | Classification["cls"] | null = !lastMove
+    ? null
+    : mode === "review"
+      ? reviewedMove?.classification ?? null
+      : moveClasses?.get(ply - 1)?.cls ?? null;
 
-  // Draw the badge over the last move's destination square. Providing a
-  // squareRenderer replaces the board's default square content, so it has to
-  // re-apply squareStyles itself; left undefined when there's no badge to show.
+  // Draw the reaction badge on the last move's destination square. Providing a
+  // squareRenderer replaces the board's default square content, so it re-applies
+  // squareStyles itself; it's left undefined when there's no badge to show.
   const squareRenderer = useMemo(() => {
     if (!badgeClass || !badgeSquare) return undefined;
     return ({ square, children }: { square: string; children?: ReactNode }) => (
       <div
-        style={{
-          position: "relative",
-          width: "100%",
-          height: "100%",
-          ...squareStyles[square],
-        }}
+        style={{ position: "relative", width: "100%", height: "100%", ...squareStyles[square] }}
       >
         {children}
         {square === badgeSquare && (
           <div
             style={{
-              // A CSS size-container, so the disc scales its glyph to the
-              // square. Kept inside the square — the board clips at the edges.
+              // A CSS size-container (so the disc sizes its glyph to the square),
+              // kept inside the square since the board clips overflow at edges.
               position: "absolute",
               top: "2%",
               right: "2%",
@@ -439,13 +472,17 @@ export function BoardPanel({
       id: "trainer-board",
       squareRenderer,
       canDragPiece: ({ piece }: { piece: { pieceType: string } }) => {
+        if (mode === "train") {
+          if (!userChar) return false;
+          return piece.pieceType[0] === userChar && turn === userChar;
+        }
         // Reviewing: the board is yours to explore — your moves only ever fork a
         // side line, and the game stays intact underneath. With no game loaded
         // there is nothing to fork or come back to, so the board stays inert.
         if (mode === "review") return reviewLive && piece.pieceType[0] === turn;
-        if (mode !== "train") return true;
-        if (!userChar) return false;
-        return piece.pieceType[0] === userChar && turn === userChar;
+        // While fixing, you can only make your reply at the gap — not while
+        // reviewing an earlier move.
+        return atGap;
       },
       onPieceDrop: ({
         sourceSquare,
@@ -469,6 +506,8 @@ export function BoardPanel({
         square: string;
         piece: { pieceType: string } | null;
       }) => {
+        // Any left click clears the red annotations.
+        setRedSquares((prev) => (prev.size === 0 ? prev : new Set()));
         // A piece is already selected and a different square was tapped: try to move.
         if (moveFrom && square !== moveFrom) {
           const legal = legalMoves(fen).filter(
@@ -489,6 +528,7 @@ export function BoardPanel({
         const pc = piece?.pieceType[0];
         const canSelect =
           pc != null &&
+          atGap &&
           (mode === "train"
             ? userChar != null && pc === userChar && turn === userChar
             : mode === "review"
@@ -496,20 +536,31 @@ export function BoardPanel({
               : pc === turn);
         setMoveFrom(canSelect ? square : null);
       },
+      // Right-click toggles a red marker on the square (right-drag still draws
+      // arrows via react-chessboard's built-in handling).
+      onSquareRightClick: ({ square }: { square: string }) => {
+        setRedSquares((prev) => {
+          const next = new Set(prev);
+          if (next.has(square)) next.delete(square);
+          else next.add(square);
+          return next;
+        });
+      },
     }),
     [
       fen,
       orientation,
       theme,
       squareStyles,
-      squareRenderer,
       arrows,
+      squareRenderer,
       mode,
       userChar,
       turn,
       playMove,
       moveFrom,
       reviewLive,
+      atGap,
     ],
   );
 
@@ -519,7 +570,9 @@ export function BoardPanel({
       style={{ width: size, maxWidth: "100%" }}
     >
       <div className="flex items-stretch gap-2">
-        <EvalBar bestLine={bestLine} orientation={orientation} />
+        {/* The eval bar only means something while Stockfish is actually
+            running (build mode, engine on) — hide it in book-only / train. */}
+        {engineEnabled && <EvalBar bestLine={bestLine} orientation={orientation} />}
         <div className="relative min-w-0 flex-1">
           <Chessboard options={options} />
           <div
@@ -552,16 +605,16 @@ export function BoardPanel({
       </div>
 
       <div className="flex flex-wrap items-center gap-1.5">
-        <ControlButton onClick={goStart} disabled={navLocked} title="Start (↑)">
+        <ControlButton onClick={goStart} disabled={moveNavLocked} title="Start (↑)">
           ⏮
         </ControlButton>
-        <ControlButton onClick={goBack} disabled={navLocked} title="Back (←)">
+        <ControlButton onClick={goBack} disabled={moveNavLocked} title="Back (←)">
           ◀
         </ControlButton>
-        <ControlButton onClick={goForward} disabled={navLocked} title="Forward (→)">
+        <ControlButton onClick={goForward} disabled={moveNavLocked} title="Forward (→)">
           ▶
         </ControlButton>
-        <ControlButton onClick={goEnd} disabled={navLocked} title="End (↓)">
+        <ControlButton onClick={goEnd} disabled={moveNavLocked} title="End (↓)">
           ⏭
         </ControlButton>
         <div className="mx-1 h-5 w-px bg-slate-700" />

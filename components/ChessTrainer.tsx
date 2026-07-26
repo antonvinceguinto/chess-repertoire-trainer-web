@@ -11,6 +11,7 @@ import {
   useGameReview,
   type ReviewDepthId,
 } from "@/hooks/useGameReview";
+import { useMoveReview } from "@/hooks/useMoveReview";
 import type { ChessComGame } from "@/lib/chesscom";
 import { importantLines } from "@/lib/lines";
 import { enumerateLines } from "@/lib/repertoire";
@@ -35,12 +36,18 @@ import { FixPanel } from "./FixPanel";
 
 type Tab = "analysis" | "repertoire" | "gaps";
 
+// Persisted preference: whether Stockfish runs at all. Off = a purely book-driven
+// workflow (no evals, no danger scoring, worker never loaded).
+const ENGINE_KEY = "chess-engine-enabled";
+// Persisted preference: whether to grade moves with chess.com-style reactions.
+const REVIEW_KEY = "chess-move-review";
+
 export function ChessTrainer() {
   const {
     fen,
+    line,
     mode,
     activeRepertoire,
-    playLineSans,
     startTraining,
     stopTraining,
     fixQueue,
@@ -53,7 +60,8 @@ export function ChessTrainer() {
   } = useTrainer();
   const book = useBookData();
 
-  const [engineOn, setEngineOn] = useState(true);
+  const [engineOn, setEngineOnState] = useState(true);
+  const [reviewOn, setReviewOnState] = useState(true);
   const [multipv, setMultipv] = useState(3);
   const [tab, setTab] = useState<Tab>("analysis");
   const [reviewDepth, setReviewDepth] =
@@ -62,13 +70,45 @@ export function ChessTrainer() {
   const [thoroughness, setThoroughness] = useState<Thoroughness>(
     DEFAULT_THOROUGHNESS,
   );
+  const [bookHidden, setBookHidden] = useState(false);
+  // Persisted prefs live in localStorage, which is only readable after mount.
+  // Until we've read them, keep the engine dormant so a saved "off" choice never
+  // spins up (then tears down) a Stockfish worker on load.
+  const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem(THOROUGHNESS_KEY);
-    if (saved === "club" || saved === "tournament" || saved === "master") {
-      setThoroughness(saved);
+    try {
+      const saved = window.localStorage.getItem(THOROUGHNESS_KEY);
+      if (saved === "club" || saved === "tournament" || saved === "master") {
+        setThoroughness(saved);
+      }
+      // Restore a previously chosen book-only (engine off) preference.
+      if (window.localStorage.getItem(ENGINE_KEY) === "0") setEngineOnState(false);
+      // Restore the move-review (reactions) preference.
+      if (window.localStorage.getItem(REVIEW_KEY) === "0") setReviewOnState(false);
+    } catch {
+      /* ignore */
     }
+    setHydrated(true);
   }, []);
+
+  const setEngineOn = (on: boolean) => {
+    setEngineOnState(on);
+    try {
+      window.localStorage.setItem(ENGINE_KEY, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const setReviewOn = (on: boolean) => {
+    setReviewOnState(on);
+    try {
+      window.localStorage.setItem(REVIEW_KEY, on ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  };
 
   const changeThoroughness = (t: Thoroughness) => {
     setThoroughness(t);
@@ -109,14 +149,30 @@ export function ChessTrainer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book]);
 
-  // Keep the engine running while fixing gaps even if the user turned it off,
-  // so the recommended reply always has an eval. In review the sweep owns every
-  // number on the game itself — but inside a side line there is no sweep data at
-  // all, so the live engine takes over there, and only there.
+  // Stockfish runs only while building with the engine turned on, and only once
+  // the persisted preference has been read (so a saved "off" never briefly boots
+  // the worker). Turning it off is a global, persisted choice that drops the
+  // whole app into a book-only workflow (gap-fixing included) — nothing here
+  // re-enables it behind the user's back.
+  //
+  // Review is the one exception, and only inside a side line: the whole mode is
+  // engine-driven (the sweep below ignores `engineOn` too), the sweep has no
+  // data off the game, and the toggle lives in a panel review doesn't render.
   const engineEnabled =
-    ((engineOn || !!fixQueue) && mode === "build") ||
+    (engineOn && hydrated && mode === "build") ||
     (mode === "review" && inVariation);
   const { status, evaluation } = useEngine(fen, engineEnabled, multipv);
+
+  // Move review runs its own background engine to grade every move in the
+  // current line — only while building with the engine on (not during a fix).
+  // Both sides are graded: while building you play the whole line yourself, and
+  // an opponent's blunder is exactly what the review should surface.
+  // `mode === "build"` is explicit because engineEnabled is now also true inside
+  // a review side line, and grading the board there is the game review's job.
+  const reviewEnabled =
+    engineEnabled && mode === "build" && reviewOn && !fixQueue;
+  const review = useMoveReview(line, reviewEnabled, book);
+
   const {
     gaps,
     progress,
@@ -125,17 +181,19 @@ export function ChessTrainer() {
   } = useCoverage(activeRepertoire, minImportanceFor(thoroughness));
 
   // Whole-game review runs on its own Stockfish instance, so it never competes
-  // with the live analysis engine above.
-  const { review, progress: reviewProgress } = useGameReview(
+  // with the live analysis engine above. Named `gameReview` to keep it distinct
+  // from `review` above, which is the per-move grading of the build-mode line.
+  const { review: gameReview, progress: reviewProgress } = useGameReview(
     reviewSession?.game ?? null,
     mode === "review",
     depthFor(reviewDepth),
     book,
   );
 
+  // Tapping a single gap row reproduces it as a one-gap guided fix: the board
+  // pins to the position and the suggested replies are one tap from being saved.
   const prepareGap = (sans: string[]) => {
-    playLineSans(sans);
-    setTab("analysis");
+    startFix([sans]);
   };
 
   const openGame = (game: ChessComGame, username: string) => {
@@ -151,8 +209,13 @@ export function ChessTrainer() {
     stopTraining();
   };
 
+  // The opening book sits in its own left column while building; during
+  // training / gap-fixing / review the board takes over that space.
+  const buildBoard = mode === "build" && !fixQueue;
+  const showBook = buildBoard && !bookHidden;
+
   return (
-    <div className="mx-auto min-h-screen w-full max-w-[1400px] px-3 py-4 sm:px-5">
+    <div className="mx-auto min-h-screen w-full max-w-[1760px] px-3 py-4 sm:px-5">
       <Header
         mode={mode}
         canTrain={!!activeRepertoire}
@@ -161,25 +224,54 @@ export function ChessTrainer() {
         onReview={() => setMode("review")}
       />
 
-      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,1fr)_minmax(360px,440px)]">
-        {/* Left: board */}
-        <div className="mx-auto w-fit max-w-full lg:mx-0">
+      <div
+        className={`mt-4 grid grid-cols-1 gap-4 ${
+          showBook
+            ? "xl:grid-cols-[minmax(300px,340px)_minmax(0,1fr)_minmax(360px,440px)]"
+            : "lg:grid-cols-[minmax(320px,1fr)_minmax(360px,440px)]"
+        }`}
+      >
+        {/* Left column: opening book (build mode only) */}
+        {showBook && (
+          <aside className="order-3 xl:order-1">
+            <BookPanel
+              evaluation={evaluation}
+              onHide={() => setBookHidden(true)}
+            />
+          </aside>
+        )}
+
+        {/* Centre: board */}
+        <div className="order-1 flex max-w-full flex-col items-center xl:order-2">
+          {buildBoard && bookHidden && (
+            <div className="mb-2 flex w-full justify-start">
+              <button
+                type="button"
+                onClick={() => setBookHidden(false)}
+                className="rounded-md border border-slate-700 bg-slate-800/80 px-2.5 py-1 text-xs font-medium text-slate-300 transition hover:bg-slate-700 hover:text-white"
+                title="Show the opening book"
+              >
+                ← Show opening book
+              </button>
+            </div>
+          )}
           <BoardPanel
             evaluation={evaluation}
             engineStatus={status}
             engineEnabled={engineEnabled}
-            review={mode === "review" ? review : null}
+            review={mode === "review" ? gameReview : null}
+            moveClasses={reviewEnabled ? review.classes : undefined}
           />
         </div>
 
-        {/* Right: panels */}
-        <div className="flex flex-col gap-3">
+        {/* Right column: panels */}
+        <div className="order-2 flex flex-col gap-3 xl:order-3">
           {mode !== "review" && <RepertoireSelect />}
 
           {mode === "review" ? (
             reviewSession ? (
               <ReviewPanel
-                review={review}
+                review={gameReview}
                 progress={reviewProgress}
                 depthId={reviewDepth}
                 onDepthChange={setReviewDepth}
@@ -193,10 +285,16 @@ export function ChessTrainer() {
               onLevelChange={changeTrainLevel}
             />
           ) : fixQueue ? (
-            <FixPanel evaluation={evaluation} status={status} />
+            <FixPanel evaluation={evaluation} status={status} engineOn={engineOn} />
           ) : (
             <>
-              <MoveList />
+              <MoveList
+                classes={review.classes}
+                reviewOn={reviewOn}
+                onToggleReview={setReviewOn}
+                reviewAvailable={engineOn}
+                reviewBusy={review.busy}
+              />
 
               <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1 text-sm">
                 {(["analysis", "repertoire", "gaps"] as Tab[]).map((tb) => (
@@ -221,17 +319,14 @@ export function ChessTrainer() {
               </div>
 
               {tab === "analysis" && (
-                <>
-                  <EnginePanel
-                    evaluation={evaluation}
-                    status={status}
-                    engineOn={engineOn}
-                    setEngineOn={setEngineOn}
-                    multipv={multipv}
-                    setMultipv={setMultipv}
-                  />
-                  <BookPanel evaluation={evaluation} />
-                </>
+                <EnginePanel
+                  evaluation={evaluation}
+                  status={status}
+                  engineOn={engineOn}
+                  setEngineOn={setEngineOn}
+                  multipv={multipv}
+                  setMultipv={setMultipv}
+                />
               )}
 
               {tab === "repertoire" && <RepertoirePanel />}
@@ -246,6 +341,7 @@ export function ChessTrainer() {
                   onLevelChange={changeThoroughness}
                   onPrepare={prepareGap}
                   onStartFix={startFix}
+                  engineAvailable={engineOn}
                 />
               )}
             </>

@@ -3,11 +3,15 @@
 import { useMemo, useState } from "react";
 import { useTrainer } from "@/context/TrainerContext";
 import { useDanger } from "@/hooks/useDanger";
-import { overallProgress, type OpeningProgress } from "@/lib/coverage";
+import {
+  overallProgress,
+  type AnsweredLine,
+  type OpeningProgress,
+} from "@/lib/coverage";
 import { gapKey, type DangerScore } from "@/lib/danger";
 import type { Gap } from "@/lib/gaps";
 import { THOROUGHNESS_LEVELS, type Thoroughness } from "@/lib/thoroughness";
-import { Empty, GapRow } from "./GapRow";
+import { AnsweredRow, Empty, GapRow } from "./GapRow";
 import { Button, Panel, PanelHeader } from "./ui";
 
 interface Props {
@@ -19,9 +23,11 @@ interface Props {
   onLevelChange: (level: Thoroughness) => void;
   onPrepare: (sans: string[]) => void;
   onStartFix: (paths: string[][]) => void;
+  /** Whether Stockfish is on — danger scoring needs it, so it's gated on this. */
+  engineAvailable: boolean;
 }
 
-type View = "openings" | "gaps";
+type View = "openings" | "gaps" | "answered";
 
 /** The move path that lands on the position where a gap needs answering. */
 function gapPath(g: Gap): string[] {
@@ -37,13 +43,26 @@ export function CoveragePanel({
   onLevelChange,
   onPrepare,
   onStartFix,
+  engineAvailable,
 }: Props) {
   const { activeRepertoire } = useTrainer();
   const [view, setView] = useState<View>("openings");
-  const [dangerOn, setDangerOn] = useState(false);
+  const [dangerPref, setDangerPref] = useState(false);
+  // Danger scoring runs Stockfish, so it can only be active when the engine is
+  // on — a persisted "engine off" choice forces it back to plain importance order.
+  const dangerOn = dangerPref && engineAvailable;
   const hasLines = !!activeRepertoire && activeRepertoire.root.length > 0;
 
   const overall = useMemo(() => overallProgress(progress), [progress]);
+
+  // Every line you've already answered, most-likely-to-be-faced first.
+  const answered = useMemo(
+    () =>
+      progress
+        .flatMap((p) => p.answered)
+        .sort((a, b) => b.importance - a.importance),
+    [progress],
+  );
 
   // Engine-scored danger for the flat gap list (only while that view is open).
   const danger = useDanger(gaps, dangerOn && view === "gaps" && ready);
@@ -78,6 +97,16 @@ export function CoveragePanel({
           onStartFix={onStartFix}
         />
       );
+  } else if (view === "answered") {
+    body =
+      answered.length === 0 ? (
+        <Empty>
+          Answer some gaps first — the lines you build show up here to replay
+          and tweak.
+        </Empty>
+      ) : (
+        <AnsweredView answered={answered} onReplay={onPrepare} />
+      );
   } else {
     body =
       gaps.length === 0 ? (
@@ -90,7 +119,8 @@ export function CoveragePanel({
           onPrepare={onPrepare}
           onStartFix={onStartFix}
           dangerOn={dangerOn}
-          onDangerToggle={() => setDangerOn((d) => !d)}
+          onDangerToggle={() => setDangerPref((d) => !d)}
+          engineAvailable={engineAvailable}
           dangerScores={danger.scores}
           dangerDone={danger.done}
           dangerTotal={danger.total}
@@ -109,6 +139,7 @@ export function CoveragePanel({
               [
                 ["openings", "By opening"],
                 ["gaps", "All gaps"],
+                ["answered", "Answered"],
               ] as [View, string][]
             ).map(([v, label]) => (
               <button
@@ -259,19 +290,21 @@ function OpeningRow({
       : pct >= 30
         ? "from-amber-600 to-amber-400"
         : "from-rose-700 to-rose-500";
+  // Both open gaps and already-prepared lines make a row worth expanding.
+  const hasDetail = p.gaps.length > 0 || p.answered.length > 0;
 
   return (
     <li className="rounded-md border border-slate-800 bg-slate-900/40">
       <button
         type="button"
-        onClick={() => !done && setOpen((o) => !o)}
-        aria-expanded={done ? undefined : open}
+        onClick={() => hasDetail && setOpen((o) => !o)}
+        aria-expanded={hasDetail ? open : undefined}
         className={`w-full rounded-md px-2.5 py-2 text-left transition ${
-          done ? "cursor-default" : "hover:bg-slate-800/50"
+          hasDetail ? "hover:bg-slate-800/50" : "cursor-default"
         }`}
       >
         <div className="flex items-center gap-2">
-          {!done && (
+          {hasDetail && (
             <span
               className={`shrink-0 text-[10px] text-slate-500 transition ${open ? "rotate-90" : ""}`}
             >
@@ -310,30 +343,77 @@ function OpeningRow({
         </div>
       </button>
 
-      {open && !done && p.gaps.length > 0 && (
+      {open && hasDetail && (
         <div className="border-t border-slate-800 p-1.5">
-          <Button
-            variant="secondary"
-            onClick={() => onStartFix(p.gaps.map(gapPath))}
-            className="mb-1.5 w-full !py-1 text-[11px]"
-          >
-            ⚡ Fix {p.family} — {p.gaps.length}{" "}
-            {p.gaps.length === 1 ? "gap" : "gaps"}
-          </Button>
-          <ul className="flex flex-col gap-1">
-            {p.gaps.map((g) => (
-              <GapRow
-                key={`${g.fen}-${g.missingSan ?? "reply"}`}
-                gap={g}
-                rank={0}
-                maxImp={p.gaps[0].importance || 1}
-                onPrepare={onPrepare}
-              />
-            ))}
-          </ul>
+          {p.gaps.length > 0 && (
+            <>
+              <Button
+                variant="secondary"
+                onClick={() => onStartFix(p.gaps.map(gapPath))}
+                className="mb-1.5 w-full !py-1 text-[11px]"
+              >
+                ⚡ Fix {p.family} — {p.gaps.length}{" "}
+                {p.gaps.length === 1 ? "gap" : "gaps"}
+              </Button>
+              <ul className="flex flex-col gap-1">
+                {p.gaps.map((g) => (
+                  <GapRow
+                    key={`${g.fen}-${g.missingSan ?? "reply"}`}
+                    gap={g}
+                    rank={0}
+                    maxImp={p.gaps[0].importance || 1}
+                    onPrepare={onPrepare}
+                  />
+                ))}
+              </ul>
+            </>
+          )}
+          {p.answered.length > 0 && (
+            <>
+              <p
+                className={`px-0.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 ${
+                  p.gaps.length > 0 ? "mt-2.5" : ""
+                }`}
+              >
+                Prepared — tap to replay
+              </p>
+              <ul className="flex flex-col gap-1">
+                {p.answered.map((a) => (
+                  <AnsweredRow
+                    key={a.path.join(" ")}
+                    line={a}
+                    onReplay={onPrepare}
+                  />
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       )}
     </li>
+  );
+}
+
+function AnsweredView({
+  answered,
+  onReplay,
+}: {
+  answered: AnsweredLine[];
+  onReplay: (path: string[]) => void;
+}) {
+  return (
+    <>
+      <p className="px-1 pb-2 text-[11px] leading-relaxed text-slate-500">
+        <span className="text-slate-300">{answered.length}</span> answered{" "}
+        {answered.length === 1 ? "line" : "lines"} — tap one to replay it move by
+        move and review or add another response.
+      </p>
+      <ul className="flex flex-col gap-1">
+        {answered.map((a) => (
+          <AnsweredRow key={a.path.join(" ")} line={a} onReplay={onReplay} />
+        ))}
+      </ul>
+    </>
   );
 }
 
@@ -343,6 +423,7 @@ function AllGapsView({
   onStartFix,
   dangerOn,
   onDangerToggle,
+  engineAvailable,
   dangerScores,
   dangerDone,
   dangerTotal,
@@ -353,6 +434,7 @@ function AllGapsView({
   onStartFix: (paths: string[][]) => void;
   dangerOn: boolean;
   onDangerToggle: () => void;
+  engineAvailable: boolean;
   dangerScores: Map<string, DangerScore>;
   dangerDone: number;
   dangerTotal: number;
@@ -395,8 +477,13 @@ function AllGapsView({
         <button
           type="button"
           onClick={onDangerToggle}
-          title="Rank by how sharp each gap is, using Stockfish"
-          className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-medium transition ${
+          disabled={!engineAvailable}
+          title={
+            engineAvailable
+              ? "Rank by how sharp each gap is, using Stockfish"
+              : "Turn Stockfish on to rank gaps by danger"
+          }
+          className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
             dangerOn
               ? "border-rose-600/60 bg-rose-500/15 text-rose-300"
               : "border-slate-700 text-slate-400 hover:text-slate-200"
@@ -422,7 +509,8 @@ function AllGapsView({
         onClick={() => onStartFix(ordered.map(gapPath))}
         className="mb-2 w-full !py-1.5 text-xs"
       >
-        ⚡ Fix all {gaps.length} — guided, with engine suggestions
+        ⚡ Fix all {gaps.length} — guided
+        {engineAvailable ? ", with engine suggestions" : ""}
       </Button>
       <ul className="flex flex-col gap-1">
         {ordered.map((g, i) => (

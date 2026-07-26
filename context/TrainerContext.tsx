@@ -65,6 +65,10 @@ interface TrainerContextValue {
   orientation: Color;
   lastMove: LineMove | null;
   currentSans: string[];
+  /** The gap position while fixing (end of `line`), independent of the `ply` cursor. */
+  gapFen: string;
+  /** True while a line is animating in move-by-move (e.g. entering a fix). */
+  animating: boolean;
 
   // Repertoires
   repertoires: Repertoire[];
@@ -174,6 +178,8 @@ function buildLine(sans: string[]): LineMove[] {
 export function TrainerProvider({ children }: { children: React.ReactNode }) {
   const [line, setLine] = useState<LineMove[]>([]);
   const [ply, setPly] = useState(0);
+  // True while a line is playing in move-by-move (e.g. entering a fix).
+  const [animating, setAnimating] = useState(false);
   const [orientation, setOrientation] = useState<Color>("white");
   const [repertoires, setRepertoires] = useState<Repertoire[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -197,6 +203,9 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   const variationFrom = branch?.from ?? null;
   const turn = turnOf(fen);
   const lastMove = ply > 0 ? line[ply - 1] : null;
+  // The board can scrub back (via ←/→) to review how a gap arose while fixing;
+  // the gap itself is always the end of `line`, so pin its FEN independent of `ply`.
+  const gapFen = fenAtPly(line, line.length);
   const activeRepertoire = useMemo(
     () => repertoires.find((r) => r.id === activeId) ?? null,
     [repertoires, activeId],
@@ -237,6 +246,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(animRef.current);
       animRef.current = null;
     }
+    setAnimating(false);
   }, []);
   useEffect(() => stopAnimation, [stopAnimation]);
 
@@ -347,19 +357,23 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       const mv = tryMove(fen, input);
       if (!mv) return false;
       if (mode === "train") return handleTrainMove(mv);
-      // Reviewing a finished game: the board is a viewer, except when the coach
-      // has asked you to find a move — then the move is an answer, not a change.
+      // Reviewing a finished game: the move follows the game, answers an open
+      // challenge, or forks your own line off it — handleReviewMove decides.
       if (mode === "review") return reviewMoveRef.current?.(mv) ?? false;
-      // During a guided fix the board is pinned to the gap, so a board move is
-      // your reply: save it and advance, like tapping a suggested move.
-      if (fixSaveRef.current) {
-        fixSaveRef.current(mv);
-        return true;
+      // During a guided fix the board is pinned to the gap. A move made *at* the
+      // gap is your reply — save it and advance. While scrubbed back reviewing an
+      // earlier move (via ←) the board is read-only, so ignore the move.
+      if (fixQueue !== null) {
+        if (fixSaveRef.current && ply === line.length) {
+          fixSaveRef.current(mv);
+          return true;
+        }
+        return false;
       }
       advanceWith(mv);
       return true;
     },
-    [fen, mode, handleTrainMove, advanceWith, stopAnimation],
+    [fen, mode, handleTrainMove, advanceWith, stopAnimation, fixQueue, ply, line],
   );
 
   const goToPly = useCallback(
@@ -405,11 +419,17 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       setPly(0);
       const total = newLine.length;
       if (total === 0) return;
+      setAnimating(true);
       let current = 0;
       const step = () => {
         current += 1;
         setPly(current);
-        animRef.current = current < total ? setTimeout(step, LINE_ANIM_MS) : null;
+        if (current < total) {
+          animRef.current = setTimeout(step, LINE_ANIM_MS);
+        } else {
+          animRef.current = null;
+          setAnimating(false);
+        }
       };
       animRef.current = setTimeout(step, LINE_ANIM_START_MS);
     },
@@ -691,9 +711,11 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       clearReview();
       setFixQueue(paths);
       setFixIndex(0);
-      loadLineSans(paths[0]);
+      // Play the moves into the first gap one by one so you see how the position
+      // arises, rather than snapping the board to a mid-game position.
+      playLineSans(paths[0]);
     },
-    [stopAnimation, loadLineSans, clearReview],
+    [stopAnimation, playLineSans, clearReview],
   );
 
   // Jump to a specific gap in the queue. The index is clamped to the queue; an
@@ -724,19 +746,21 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     (mv: LineMove) => {
       const rep = activeRepertoire;
       if (!rep) return;
-      updateRepertoire(rep.id, (r) => addLine(r, [...line.slice(0, ply), mv]));
+      // `line` is exactly the path to the gap, so the reply is appended to it —
+      // this stays correct even when the board is scrubbed back for review.
+      updateRepertoire(rep.id, (r) => addLine(r, [...line, mv]));
       advanceFix(fixIndex);
     },
-    [activeRepertoire, line, ply, updateRepertoire, advanceFix, fixIndex],
+    [activeRepertoire, line, updateRepertoire, advanceFix, fixIndex],
   );
 
   // Save the chosen suggested response, then advance to the next gap.
   const fixAddMove = useCallback(
     (san: string) => {
-      const mv = tryMove(fen, san);
+      const mv = tryMove(gapFen, san);
       if (mv) fixSaveReply(mv);
     },
-    [fen, fixSaveReply],
+    [gapFen, fixSaveReply],
   );
 
   // Expose the current save handler to playMove (null unless actively fixing).
@@ -932,6 +956,8 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     orientation,
     lastMove,
     currentSans,
+    gapFen,
+    animating,
     repertoires,
     activeId,
     activeRepertoire,

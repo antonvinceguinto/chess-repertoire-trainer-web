@@ -10,17 +10,22 @@ import { Button, Panel, PanelHeader } from "./ui";
 interface Props {
   evaluation: EngineEval | null;
   status: EngineStatus;
+  /** Whether Stockfish is on. When off, only book theory drives suggestions. */
+  engineOn: boolean;
 }
 
 /**
  * Guided gap-fixing: walks the queue of gap positions built from the Coverage
  * tab. At each one it's your move, and the engine's pick + the book's main
  * theory are one tap away — adding a move saves it and jumps to the next gap.
+ * With the engine off it falls back to the book's theory moves alone.
  */
-export function FixPanel({ evaluation, status }: Props) {
+export function FixPanel({ evaluation, status, engineOn }: Props) {
   const {
-    fen,
-    currentSans,
+    gapFen,
+    line,
+    ply,
+    animating,
     fixQueue,
     fixIndex,
     fixAddMove,
@@ -28,7 +33,9 @@ export function FixPanel({ evaluation, status }: Props) {
     skipFix,
     endFix,
   } = useTrainer();
-  const { ready, opening, moves: bookMoves } = useBook(fen);
+  // The board may scrub back to review, but the suggestions and eval always
+  // belong to the gap position (the end of the line).
+  const { ready, opening, moves: bookMoves } = useBook(gapFen);
 
   if (!fixQueue) return null;
   const total = fixQueue.length;
@@ -61,7 +68,7 @@ export function FixPanel({ evaluation, status }: Props) {
     );
   }
 
-  const evalMatches = evaluation != null && evaluation.fen === fen;
+  const evalMatches = evaluation != null && evaluation.fen === gapFen;
   const lines = evalMatches ? evaluation.lines : [];
   const engineBest = lines[0]?.san ?? null;
   const evalBySan = new Map(lines.map((l) => [l.san, l]));
@@ -77,7 +84,9 @@ export function FixPanel({ evaluation, status }: Props) {
     a.san === engineBest ? -1 : b.san === engineBest ? 1 : b.count - a.count,
   );
 
-  const seq = formatMoveSequence(START_FEN, currentSans);
+  const gapSans = line.map((m) => m.san);
+  const seq = formatMoveSequence(START_FEN, gapSans);
+  const reviewing = ply < line.length && !animating;
 
   return (
     <Panel>
@@ -117,6 +126,11 @@ export function FixPanel({ evaluation, status }: Props) {
           <p className="mt-1 text-[11px] text-slate-500">
             Your move — pick a reply to lock this line into your repertoire.
           </p>
+          {reviewing && (
+            <p className="mt-1 text-[11px] font-medium text-amber-400/90">
+              Reviewing an earlier move — press → to return to the gap.
+            </p>
+          )}
         </div>
 
         {!ready ? (
@@ -125,8 +139,9 @@ export function FixPanel({ evaluation, status }: Props) {
           </p>
         ) : candidates.length === 0 ? (
           <p className="py-3 text-center text-[11px] leading-relaxed text-slate-500">
-            No book theory here — the engine&apos;s arrow on the board shows its
-            pick. Play any move on the board to save it, or skip.
+            No book theory here.{" "}
+            {engineOn && "The engine’s arrow on the board shows its pick. "}
+            Play any move on the board to save it, or skip.
           </p>
         ) : (
           <ul className="flex flex-col gap-1">
@@ -171,7 +186,7 @@ export function FixPanel({ evaluation, status }: Props) {
           </ul>
         )}
 
-        {status === "loading" && candidates.length > 0 && (
+        {engineOn && status === "loading" && candidates.length > 0 && (
           <p className="text-center text-[10px] text-slate-600">
             Engine still warming up — evals will fill in.
           </p>
