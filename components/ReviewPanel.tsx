@@ -476,10 +476,13 @@ function AnnotatedMoves({
                 }`}
               >
                 {m.san}
-                {m.color === userTurn &&
-                  ["inaccuracy", "mistake", "blunder", "great"].includes(
-                    m.classification,
-                  ) && <span className="ml-0.5 text-[10px]">{meta.glyph}</span>}
+                {/* Mark every verdict worth noticing, both sides. "good" and
+                    "excellent" are the unremarkable ones — a ✓ on nearly every
+                    move is just noise, so they stay bare. */}
+                {m.classification !== "good" &&
+                  m.classification !== "excellent" && (
+                    <span className="ml-0.5 text-[10px]">{meta.glyph}</span>
+                  )}
               </button>
             </span>
           );

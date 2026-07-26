@@ -6,6 +6,7 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactNode,
 } from "react";
 import { Chessboard } from "react-chessboard";
 import { useTrainer } from "@/context/TrainerContext";
@@ -13,6 +14,7 @@ import { legalMoves, tryMove } from "@/lib/chess";
 import type { GameReview, MoveClass } from "@/lib/review";
 import type { EngineEval, EngineLine, EngineStatus } from "@/lib/types";
 import { EvalBar } from "./EvalBar";
+import { MoveClassDisc } from "./MoveClassBadge";
 import { ControlButton } from "./ui";
 
 interface Props {
@@ -97,9 +99,11 @@ export function BoardPanel({
     ply === reviewChallenge.index &&
     reviewChallenge.status !== "correct";
 
-  // The move that produced the position on the board, and its verdict.
+  // The move that produced the position on the board, and its verdict. Inside a
+  // variation the moves are no longer the game's, so `review.moves[ply - 1]`
+  // would label a different move — leave it unmarked there.
   const reviewedMove =
-    mode === "review" && review && !reviewChallenge && ply >= 1
+    mode === "review" && review && !reviewChallenge && !inVariation && ply >= 1
       ? review.moves[ply - 1] ?? null
       : null;
 
@@ -318,6 +322,54 @@ export function BoardPanel({
     challengeOpen,
   ]);
 
+  // Merge the move highlight with the click-to-move option dots. Also reused by
+  // the square renderer below, which replaces the board's default squares.
+  const squareStyles = useMemo(
+    () => ({ ...highlightStyles, ...optionSquares }),
+    [highlightStyles, optionSquares],
+  );
+
+  // The verdict badge for the move just played, on its destination square.
+  const badgeSquare = reviewedMove && lastMove ? lastMove.to : null;
+  const badgeClass = reviewedMove?.classification ?? null;
+
+  // Draw the badge over the last move's destination square. Providing a
+  // squareRenderer replaces the board's default square content, so it has to
+  // re-apply squareStyles itself; left undefined when there's no badge to show.
+  const squareRenderer = useMemo(() => {
+    if (!badgeClass || !badgeSquare) return undefined;
+    return ({ square, children }: { square: string; children?: ReactNode }) => (
+      <div
+        style={{
+          position: "relative",
+          width: "100%",
+          height: "100%",
+          ...squareStyles[square],
+        }}
+      >
+        {children}
+        {square === badgeSquare && (
+          <div
+            style={{
+              // A CSS size-container, so the disc scales its glyph to the
+              // square. Kept inside the square — the board clips at the edges.
+              position: "absolute",
+              top: "2%",
+              right: "2%",
+              width: "40%",
+              height: "40%",
+              containerType: "size",
+              zIndex: 30,
+              pointerEvents: "none",
+            }}
+          >
+            <MoveClassDisc cls={badgeClass} />
+          </div>
+        )}
+      </div>
+    );
+  }, [badgeClass, badgeSquare, squareStyles]);
+
   const options = useMemo(
     () => ({
       position: fen,
@@ -325,9 +377,10 @@ export function BoardPanel({
       animationDurationInMs: 200,
       darkSquareStyle: { backgroundColor: BOARD_THEMES[theme].dark },
       lightSquareStyle: { backgroundColor: BOARD_THEMES[theme].light },
-      squareStyles: { ...highlightStyles, ...optionSquares },
+      squareStyles,
       arrows,
       id: "trainer-board",
+      squareRenderer,
       canDragPiece: ({ piece }: { piece: { pieceType: string } }) => {
         // Reviewing: the game underneath must not change, so pieces only move
         // while the coach is asking you to find something.
@@ -390,8 +443,8 @@ export function BoardPanel({
       fen,
       orientation,
       theme,
-      highlightStyles,
-      optionSquares,
+      squareStyles,
+      squareRenderer,
       arrows,
       mode,
       userChar,

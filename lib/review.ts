@@ -446,7 +446,15 @@ export function keyMoments(review: GameReview, side: Turn): MoveReview[] {
 
 export const CLASS_META: Record<
   MoveClass,
-  { label: string; glyph: string; text: string; bg: string; dot: string }
+  {
+    label: string;
+    glyph: string;
+    text: string;
+    bg: string;
+    dot: string;
+    /** Solid fill for the round on-board badge (white glyph sits on it). */
+    disc: string;
+  }
 > = {
   great: {
     label: "Great",
@@ -454,6 +462,7 @@ export const CLASS_META: Record<
     text: "text-sky-300",
     bg: "bg-sky-500/15",
     dot: "bg-sky-400",
+    disc: "bg-sky-500",
   },
   best: {
     label: "Best",
@@ -461,6 +470,7 @@ export const CLASS_META: Record<
     text: "text-emerald-300",
     bg: "bg-emerald-500/15",
     dot: "bg-emerald-400",
+    disc: "bg-emerald-500",
   },
   excellent: {
     label: "Excellent",
@@ -468,6 +478,7 @@ export const CLASS_META: Record<
     text: "text-emerald-400/90",
     bg: "bg-emerald-500/10",
     dot: "bg-emerald-500",
+    disc: "bg-emerald-600",
   },
   good: {
     label: "Good",
@@ -475,6 +486,7 @@ export const CLASS_META: Record<
     text: "text-slate-300",
     bg: "bg-slate-500/15",
     dot: "bg-slate-400",
+    disc: "bg-slate-500",
   },
   book: {
     label: "Book",
@@ -482,6 +494,7 @@ export const CLASS_META: Record<
     text: "text-violet-300",
     bg: "bg-violet-500/15",
     dot: "bg-violet-400",
+    disc: "bg-violet-500",
   },
   inaccuracy: {
     label: "Inaccuracy",
@@ -489,6 +502,7 @@ export const CLASS_META: Record<
     text: "text-amber-300",
     bg: "bg-amber-500/15",
     dot: "bg-amber-400",
+    disc: "bg-amber-500",
   },
   mistake: {
     label: "Mistake",
@@ -496,6 +510,7 @@ export const CLASS_META: Record<
     text: "text-orange-300",
     bg: "bg-orange-500/15",
     dot: "bg-orange-400",
+    disc: "bg-orange-500",
   },
   blunder: {
     label: "Blunder",
@@ -503,6 +518,7 @@ export const CLASS_META: Record<
     text: "text-rose-300",
     bg: "bg-rose-500/15",
     dot: "bg-rose-400",
+    disc: "bg-rose-600",
   },
 };
 
