@@ -53,6 +53,12 @@ export function openingNameFrom(book: RawBook, fen: string): OpeningName | null 
   return splitLabel(book.names[idx]);
 }
 
+/** Whether `san` is known theory in this position (cheap — no move replay). */
+export function isBookMove(book: RawBook, fen: string, san: string): boolean {
+  const arr = book.moves[keyOf(fen)];
+  return arr != null && arr.some(([bookSan]) => bookSan === san);
+}
+
 /** Known theory moves from this position, sorted by popularity (most common first). */
 export function bookMovesFrom(book: RawBook, fen: string): BookMove[] {
   const arr = book.moves[keyOf(fen)];

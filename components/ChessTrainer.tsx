@@ -5,6 +5,13 @@ import { useTrainer } from "@/context/TrainerContext";
 import { useEngine } from "@/hooks/useEngine";
 import { useCoverage } from "@/hooks/useCoverage";
 import { useBookData } from "@/hooks/useBookData";
+import {
+  DEFAULT_REVIEW_DEPTH,
+  depthFor,
+  useGameReview,
+  type ReviewDepthId,
+} from "@/hooks/useGameReview";
+import type { ChessComGame } from "@/lib/chesscom";
 import { importantLines } from "@/lib/lines";
 import { enumerateLines } from "@/lib/repertoire";
 import {
@@ -13,13 +20,16 @@ import {
   THOROUGHNESS_KEY,
   type Thoroughness,
 } from "@/lib/thoroughness";
+import type { Mode } from "@/lib/types";
 import { BoardPanel } from "./BoardPanel";
 import { MoveList } from "./MoveList";
 import { EnginePanel } from "./EnginePanel";
 import { BookPanel } from "./BookPanel";
 import { CoveragePanel } from "./CoveragePanel";
+import { GameBrowser } from "./GameBrowser";
 import { RepertoireSelect } from "./RepertoireSelect";
 import { RepertoirePanel } from "./RepertoirePanel";
+import { ReviewPanel } from "./ReviewPanel";
 import { TrainPanel } from "./TrainPanel";
 import { FixPanel } from "./FixPanel";
 
@@ -35,12 +45,19 @@ export function ChessTrainer() {
     stopTraining,
     fixQueue,
     startFix,
+    setMode,
+    reviewSession,
+    startReview,
+    exitReview,
   } = useTrainer();
   const book = useBookData();
 
   const [engineOn, setEngineOn] = useState(true);
   const [multipv, setMultipv] = useState(3);
   const [tab, setTab] = useState<Tab>("analysis");
+  const [reviewDepth, setReviewDepth] =
+    useState<ReviewDepthId>(DEFAULT_REVIEW_DEPTH);
+  const [gameLoadError, setGameLoadError] = useState<string | null>(null);
   const [thoroughness, setThoroughness] = useState<Thoroughness>(
     DEFAULT_THOROUGHNESS,
   );
@@ -102,9 +119,31 @@ export function ChessTrainer() {
     error: gapsError,
   } = useCoverage(activeRepertoire, minImportanceFor(thoroughness));
 
+  // Whole-game review runs on its own Stockfish instance, so it never competes
+  // with the live analysis engine above.
+  const { review, progress: reviewProgress } = useGameReview(
+    reviewSession?.game ?? null,
+    mode === "review",
+    depthFor(reviewDepth),
+    book,
+  );
+
   const prepareGap = (sans: string[]) => {
     playLineSans(sans);
     setTab("analysis");
+  };
+
+  const openGame = (game: ChessComGame, username: string) => {
+    setGameLoadError(
+      startReview(game, username)
+        ? null
+        : "That game's PGN couldn't be read — try another one.",
+    );
+  };
+
+  const goBuild = () => {
+    exitReview();
+    stopTraining();
   };
 
   return (
@@ -112,8 +151,9 @@ export function ChessTrainer() {
       <Header
         mode={mode}
         canTrain={!!activeRepertoire}
-        onBuild={stopTraining}
+        onBuild={goBuild}
         onTrain={() => startTraining(trainableLines)}
+        onReview={() => setMode("review")}
       />
 
       <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,1fr)_minmax(360px,440px)]">
@@ -123,14 +163,26 @@ export function ChessTrainer() {
             evaluation={evaluation}
             engineStatus={status}
             engineEnabled={engineEnabled}
+            review={mode === "review" ? review : null}
           />
         </div>
 
         {/* Right: panels */}
         <div className="flex flex-col gap-3">
-          <RepertoireSelect />
+          {mode !== "review" && <RepertoireSelect />}
 
-          {mode === "train" ? (
+          {mode === "review" ? (
+            reviewSession ? (
+              <ReviewPanel
+                review={review}
+                progress={reviewProgress}
+                depthId={reviewDepth}
+                onDepthChange={setReviewDepth}
+              />
+            ) : (
+              <GameBrowser onSelect={openGame} loadError={gameLoadError} />
+            )
+          ) : mode === "train" ? (
             <TrainPanel
               level={thoroughness}
               onLevelChange={changeTrainLevel}
@@ -206,12 +258,19 @@ function Header({
   canTrain,
   onBuild,
   onTrain,
+  onReview,
 }: {
-  mode: "build" | "train";
+  mode: Mode;
   canTrain: boolean;
   onBuild: () => void;
   onTrain: () => void;
+  onReview: () => void;
 }) {
+  const tab = (active: boolean) =>
+    `rounded-md px-3 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+      active ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-slate-200"
+    }`;
+
   return (
     <header className="flex flex-wrap items-center justify-between gap-3">
       <div>
@@ -219,21 +278,13 @@ function Header({
           <span className="text-2xl">♞</span> Opening Trainer
         </h1>
         <p className="text-xs text-slate-500">
-          Build your repertoire with Stockfish &amp; the Lichess explorer, then
-          drill it from memory.
+          Build your repertoire with Stockfish &amp; the Lichess explorer, drill
+          it from memory, then review your real games.
         </p>
       </div>
 
       <div className="flex rounded-lg border border-slate-700 bg-slate-900 p-1">
-        <button
-          type="button"
-          onClick={onBuild}
-          className={`rounded-md px-4 py-1.5 text-sm font-semibold transition ${
-            mode === "build"
-              ? "bg-emerald-600 text-white"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
-        >
+        <button type="button" onClick={onBuild} className={tab(mode === "build")}>
           🛠 Build
         </button>
         <button
@@ -241,13 +292,17 @@ function Header({
           onClick={onTrain}
           disabled={!canTrain}
           title={canTrain ? "Train this repertoire" : "Create a repertoire first"}
-          className={`rounded-md px-4 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
-            mode === "train"
-              ? "bg-emerald-600 text-white"
-              : "text-slate-400 hover:text-slate-200"
-          }`}
+          className={tab(mode === "train")}
         >
           🎯 Train
+        </button>
+        <button
+          type="button"
+          onClick={onReview}
+          title="Analyse your own Chess.com games"
+          className={tab(mode === "review")}
+        >
+          🔍 Review
         </button>
       </div>
     </header>
@@ -258,7 +313,8 @@ function Footer() {
   return (
     <footer className="mt-6 text-center text-[11px] text-slate-600">
       Analysis by Stockfish 18 (WASM, in-browser). Opening statistics from the
-      Lichess opening explorer. Repertoires are saved locally in your browser.
+      Lichess opening explorer. Game history from the public Chess.com API.
+      Repertoires are saved locally in your browser.
     </footer>
   );
 }

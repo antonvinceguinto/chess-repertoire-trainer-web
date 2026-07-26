@@ -34,6 +34,10 @@ import {
   saveRepertoires,
   setComment,
 } from "@/lib/repertoire";
+import { loadGame } from "@/lib/pgn";
+import type { ChessComGame } from "@/lib/chesscom";
+import { colorOf } from "@/lib/chesscom";
+import type { ReviewChallenge, ReviewSession } from "@/lib/review";
 import { mergeRepertoires } from "@/lib/transfer";
 import { reshuffleLines, shuffle } from "@/lib/shuffle";
 
@@ -100,6 +104,26 @@ interface TrainerContextValue {
   nextFix: () => void;
   skipFix: () => void;
   endFix: () => void;
+
+  // Game review (your own Chess.com games)
+  reviewSession: ReviewSession | null;
+  /** Load a downloaded game onto the board. Returns false if its PGN is unreadable. */
+  startReview: (source: ChessComGame, username: string) => boolean;
+  /** Put the reviewed game away but stay on the game list. */
+  closeReviewGame: () => void;
+  /** Leave review mode entirely and go back to building. */
+  exitReview: () => void;
+  /** Ply the board is on, expressed as the half-move index the review lists. */
+  reviewChallenge: ReviewChallenge | null;
+  /** Park the board before move `index` and ask the user to find `bestSan`. */
+  startChallenge: (index: number, bestSan: string) => void;
+  endChallenge: () => void;
+  /** Play a variation onto the board from `fromPly`, keeping the game restorable. */
+  playVariation: (fromPly: number, sans: string[]) => void;
+  /** True while a previewed variation has replaced part of the game. */
+  inVariation: boolean;
+  /** Put the reviewed game back on the board at `ply`. */
+  restoreGame: (ply?: number) => void;
 }
 
 const TrainerContext = createContext<TrainerContextValue | null>(null);
@@ -143,6 +167,12 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   // Latest "save this reply & advance" handler, or null when not fixing — lets
   // playMove (defined earlier) route a board move through the fix flow.
   const fixSaveRef = useRef<((mv: LineMove) => void) | null>(null);
+  // Game review: the loaded game, the "find the better move" prompt, and the
+  // ply a previewed variation branched from (null when the game itself is up).
+  const [reviewSession, setReviewSession] = useState<ReviewSession | null>(null);
+  const [reviewChallenge, setReviewChallenge] =
+    useState<ReviewChallenge | null>(null);
+  const [variationFrom, setVariationFrom] = useState<number | null>(null);
 
   const fen = fenAtPly(line, ply);
   const turn = turnOf(fen);
@@ -196,6 +226,13 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     },
     [],
   );
+
+  /** Drop everything about a reviewed game (any other mode takes the board). */
+  const clearReview = useCallback(() => {
+    setReviewSession(null);
+    setReviewChallenge(null);
+    setVariationFrom(null);
+  }, []);
 
   const advanceWith = useCallback(
     (mv: LineMove) => {
@@ -280,12 +317,19 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
 
   /* ---------------- Navigation ---------------- */
 
+  // Latest "check this against the engine's move" handler for review mode, or
+  // null outside it — same indirection trick as fixSaveRef.
+  const reviewMoveRef = useRef<((mv: LineMove) => boolean) | null>(null);
+
   const playMove = useCallback(
     (input: MoveInput | string): boolean => {
       stopAnimation();
       const mv = tryMove(fen, input);
       if (!mv) return false;
       if (mode === "train") return handleTrainMove(mv);
+      // Reviewing a finished game: the board is a viewer, except when the coach
+      // has asked you to find a move — then the move is an answer, not a change.
+      if (mode === "review") return reviewMoveRef.current?.(mv) ?? false;
       // During a guided fix the board is pinned to the gap, so a board move is
       // your reply: save it and advance, like tapping a suggested move.
       if (fixSaveRef.current) {
@@ -481,9 +525,10 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       stopAnimation();
       setFixQueue(null);
       setModeState(m);
+      if (m !== "review") clearReview();
       if (m === "build") setSession(null);
     },
-    [stopAnimation],
+    [stopAnimation, clearReview],
   );
 
   // `lineSans` is the (thoroughness-filtered) set of lines to drill; the caller
@@ -494,6 +539,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       if (!rep) return;
       stopAnimation();
       setFixQueue(null);
+      clearReview();
       // Random order, but a full shuffled pass covers every line before a repeat.
       const lines = shuffle(lineSans);
       setLine([]);
@@ -512,7 +558,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
         lineIndex: 0,
       });
     },
-    [activeRepertoire, stopAnimation],
+    [activeRepertoire, stopAnimation, clearReview],
   );
 
   // Fresh random pass over the current session's lines (no re-filtering needed).
@@ -611,11 +657,12 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       stopAnimation();
       setModeState("build");
       setSession(null);
+      clearReview();
       setFixQueue(paths);
       setFixIndex(0);
       loadLineSans(paths[0]);
     },
-    [stopAnimation, loadLineSans],
+    [stopAnimation, loadLineSans, clearReview],
   );
 
   // Jump to a specific gap in the queue. The index is clamped to the queue; an
@@ -679,6 +726,140 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     setPly(0);
   }, []);
 
+  /* ---------------- Game review ---------------- */
+
+  /**
+   * Put a downloaded game on the board and switch to review mode. The board
+   * starts at move 0 so the eval graph and summary read from the beginning.
+   */
+  const startReview = useCallback(
+    (source: ChessComGame, username: string): boolean => {
+      const game = loadGame(source.pgn);
+      if (!game) return false;
+      stopAnimation();
+      setSession(null);
+      setFixQueue(null);
+      setReviewChallenge(null);
+      setVariationFrom(null);
+      setModeState("review");
+      const color = colorOf(source, username) ?? "white";
+      setReviewSession({ source, game, color, username });
+      setOrientation(color);
+      setLine(game.moves);
+      setPly(0);
+      return true;
+    },
+    [stopAnimation],
+  );
+
+  // Back to the game list: drop the game, keep the user in review mode.
+  const closeReviewGame = useCallback(() => {
+    stopAnimation();
+    clearReview();
+    setLine([]);
+    setPly(0);
+  }, [stopAnimation, clearReview]);
+
+  const exitReview = useCallback(() => {
+    if (mode !== "review") return;
+    stopAnimation();
+    clearReview();
+    setModeState("build");
+    setLine([]);
+    setPly(0);
+  }, [mode, stopAnimation, clearReview]);
+
+  // Park the board on the position *before* a flagged move and wait for an answer.
+  const startChallenge = useCallback(
+    (index: number, bestSan: string) => {
+      const game = reviewSession?.game;
+      if (!game) return;
+      stopAnimation();
+      setVariationFrom(null);
+      setLine(game.moves);
+      setPly(index);
+      setReviewChallenge({ index, bestSan, status: "waiting", lastWrong: null });
+    },
+    [reviewSession, stopAnimation],
+  );
+
+  // Dismissing a challenge steps forward onto the flagged move itself, so the
+  // coach keeps talking about it rather than the opponent's previous move.
+  const endChallenge = useCallback(() => {
+    if (reviewChallenge) setPly(reviewChallenge.index + 1);
+    setReviewChallenge(null);
+  }, [reviewChallenge]);
+
+  const handleReviewMove = useCallback(
+    (mv: LineMove): boolean => {
+      const challenge = reviewChallenge;
+      if (!challenge || ply !== challenge.index) return false;
+      setReviewChallenge((c) =>
+        c
+          ? mv.san === c.bestSan
+            ? { ...c, status: "correct", lastWrong: null }
+            : { ...c, status: "wrong", lastWrong: mv.san }
+          : c,
+      );
+      // Always false: the reviewed game must stay intact under the board.
+      return false;
+    },
+    [reviewChallenge, ply],
+  );
+
+  reviewMoveRef.current = mode === "review" ? handleReviewMove : null;
+
+  /**
+   * Branch a line off the reviewed game and play it out, so "here's what you
+   * should have done" is something you watch rather than read.
+   */
+  const playVariation = useCallback(
+    (fromPly: number, sans: string[]) => {
+      const base = reviewSession ? reviewSession.game.moves : line;
+      stopAnimation();
+      setReviewChallenge(null);
+
+      let f = fenAtPly(base, fromPly);
+      const extra: LineMove[] = [];
+      for (const san of sans) {
+        const mv = tryMove(f, san);
+        if (!mv) break;
+        extra.push(mv);
+        f = mv.fen;
+      }
+      if (extra.length === 0) return;
+
+      setLine([...base.slice(0, fromPly), ...extra]);
+      setVariationFrom(fromPly);
+      setPly(fromPly);
+
+      const total = fromPly + extra.length;
+      let current = fromPly;
+      const step = () => {
+        current += 1;
+        setPly(current);
+        animRef.current = current < total ? setTimeout(step, LINE_ANIM_MS) : null;
+      };
+      animRef.current = setTimeout(step, LINE_ANIM_START_MS);
+    },
+    [reviewSession, line, stopAnimation],
+  );
+
+  const restoreGame = useCallback(
+    (toPly?: number) => {
+      const game = reviewSession?.game;
+      if (!game) return;
+      stopAnimation();
+      setReviewChallenge(null);
+      setLine(game.moves);
+      setPly(
+        Math.max(0, Math.min(game.moves.length, toPly ?? variationFrom ?? 0)),
+      );
+      setVariationFrom(null);
+    },
+    [reviewSession, variationFrom, stopAnimation],
+  );
+
   const value: TrainerContextValue = {
     line,
     ply,
@@ -728,6 +909,16 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     nextFix,
     skipFix,
     endFix,
+    reviewSession,
+    startReview,
+    closeReviewGame,
+    exitReview,
+    reviewChallenge,
+    startChallenge,
+    endChallenge,
+    playVariation,
+    inVariation: variationFrom !== null,
+    restoreGame,
   };
 
   return (

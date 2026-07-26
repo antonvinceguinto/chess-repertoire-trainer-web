@@ -10,7 +10,8 @@ import {
 import { Chessboard } from "react-chessboard";
 import { useTrainer } from "@/context/TrainerContext";
 import { legalMoves, tryMove } from "@/lib/chess";
-import type { EngineEval, EngineStatus } from "@/lib/types";
+import type { GameReview, MoveClass } from "@/lib/review";
+import type { EngineEval, EngineLine, EngineStatus } from "@/lib/types";
 import { EvalBar } from "./EvalBar";
 import { ControlButton } from "./ui";
 
@@ -18,9 +19,23 @@ interface Props {
   evaluation: EngineEval | null;
   engineStatus: EngineStatus;
   engineEnabled: boolean;
+  /** Set while reviewing a game, so the board can colour the move just played. */
+  review?: GameReview | null;
 }
 
 const HIGHLIGHT = "rgba(250, 204, 21, 0.45)";
+
+/** Square tint for the move just played, by how good it was. */
+const REVIEW_TINT: Record<MoveClass, string> = {
+  blunder: "rgba(244, 63, 94, 0.45)",
+  mistake: "rgba(251, 146, 60, 0.45)",
+  inaccuracy: "rgba(251, 191, 36, 0.45)",
+  good: "rgba(148, 163, 184, 0.40)",
+  excellent: "rgba(52, 211, 153, 0.40)",
+  best: "rgba(34, 197, 94, 0.42)",
+  great: "rgba(56, 189, 248, 0.45)",
+  book: "rgba(167, 139, 250, 0.40)",
+};
 
 /** Selectable board colour schemes (light / dark square colours). */
 const BOARD_THEMES = {
@@ -38,7 +53,12 @@ const MAX_BOARD = 900;
 const DEFAULT_BOARD = 560;
 const BOARD_SIZE_KEY = "chess-board-size";
 
-export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
+export function BoardPanel({
+  evaluation,
+  engineStatus,
+  engineEnabled,
+  review = null,
+}: Props) {
   const t = useTrainer();
   const {
     fen,
@@ -49,6 +69,8 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     turn,
     session,
     fixQueue,
+    reviewChallenge,
+    inVariation,
     playMove,
     goStart,
     goBack,
@@ -64,7 +86,47 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
   const navLocked = mode === "train" || fixQueue !== null;
 
   const evalMatches = evaluation != null && evaluation.fen === fen;
-  const bestLine = evalMatches && evaluation.lines.length > 0 ? evaluation.lines[0] : null;
+  const liveBestLine =
+    evalMatches && evaluation.lines.length > 0 ? evaluation.lines[0] : null;
+
+  // In review the board is a viewer: pieces only move while the coach has
+  // asked you to find a move, and only until you've found it.
+  const challengeOpen =
+    mode === "review" &&
+    reviewChallenge != null &&
+    ply === reviewChallenge.index &&
+    reviewChallenge.status !== "correct";
+
+  // The move that produced the position on the board, and its verdict.
+  const reviewedMove =
+    mode === "review" && review && !reviewChallenge && ply >= 1
+      ? review.moves[ply - 1] ?? null
+      : null;
+
+  // The live engine is parked during review, so drive the eval bar from the
+  // sweep's own numbers instead of leaving it stuck at 0.00.
+  const reviewBestLine: EngineLine | null = useMemo(() => {
+    if (mode !== "review" || inVariation || !review) return null;
+    const index = Math.min(ply, review.moves.length) - 1;
+    const move = index >= 0 ? review.moves[index] : review.moves[0];
+    if (!move) return null;
+    const scoreWhite = index >= 0 ? move.cpAfter : move.cpBefore;
+    const mate = index >= 0 ? move.mateAfter : move.mateBefore;
+    return {
+      multipv: 1,
+      depth: review.depth,
+      type: mate != null ? "mate" : "cp",
+      value: mate != null ? Math.abs(mate) : scoreWhite,
+      scoreWhite,
+      uci: "",
+      san: "",
+      pvSan: [],
+    };
+  }, [mode, inVariation, review, ply]);
+
+  // During review only the sweep may drive the bar — otherwise the last
+  // evaluation from build mode lingers on the identical starting position.
+  const bestLine = mode === "review" ? reviewBestLine : liveBestLine;
 
   // Resizable board widget (persisted across sessions).
   const [size, setSize] = useState(DEFAULT_BOARD);
@@ -133,9 +195,9 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     window.addEventListener("pointerup", onUp);
   };
 
-  // Keyboard navigation (build mode only; not while a fix is locked to a gap).
+  // Keyboard navigation (not in training, where the board is pinned to a drill).
   useEffect(() => {
-    if (mode !== "build") return;
+    if (mode === "train") return;
     const onKey = (e: KeyboardEvent) => {
       const el = document.activeElement;
       if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
@@ -165,11 +227,15 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
   const highlightStyles = useMemo(() => {
     const styles: Record<string, CSSProperties> = {};
     if (lastMove) {
-      styles[lastMove.from] = { background: HIGHLIGHT };
-      styles[lastMove.to] = { background: HIGHLIGHT };
+      // In review, colour the last move by how good it was instead of plain yellow.
+      const tint = reviewedMove
+        ? REVIEW_TINT[reviewedMove.classification]
+        : HIGHLIGHT;
+      styles[lastMove.from] = { background: tint };
+      styles[lastMove.to] = { background: tint };
     }
     return styles;
-  }, [lastMove]);
+  }, [lastMove, reviewedMove]);
 
   // Click / tap to move: first tap selects a piece, second tap moves it.
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
@@ -198,7 +264,8 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
     return styles;
   }, [moveFrom, fen]);
 
-  // Arrows: engine suggestions in build mode; revealed answers in train mode.
+  // Arrows: engine suggestions in build mode; revealed answers in train mode;
+  // the move you should have played in review mode.
   const arrows = useMemo(() => {
     let raw: { startSquare: string; endSquare: string; color: string }[];
     if (mode === "train") {
@@ -208,6 +275,18 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       const mv = tryMove(fen, expected);
       if (!mv) return [];
       raw = [{ startSquare: mv.from, endSquare: mv.to, color: "#22c55e" }];
+    } else if (mode === "review") {
+      // Never draw the answer while it's still being asked for.
+      if (challengeOpen) return [];
+      const solved =
+        reviewChallenge && review
+          ? review.moves[reviewChallenge.index] ?? null
+          : null;
+      const target = solved ?? reviewedMove;
+      if (!target?.bestSan || target.bestSan === target.san) return [];
+      const best = tryMove(target.fenBefore, target.bestSan);
+      if (!best) return [];
+      raw = [{ startSquare: best.from, endSquare: best.to, color: "#22c55e" }];
     } else {
       if (!engineEnabled || !evalMatches) return [];
       const palette = ["#22c55e", "#38bdf8", "#a78bfa"];
@@ -225,7 +304,19 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       seen.add(k);
       return true;
     });
-  }, [mode, session, ply, fen, engineEnabled, evalMatches, evaluation]);
+  }, [
+    mode,
+    session,
+    ply,
+    fen,
+    engineEnabled,
+    evalMatches,
+    evaluation,
+    review,
+    reviewChallenge,
+    reviewedMove,
+    challengeOpen,
+  ]);
 
   const options = useMemo(
     () => ({
@@ -238,6 +329,9 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       arrows,
       id: "trainer-board",
       canDragPiece: ({ piece }: { piece: { pieceType: string } }) => {
+        // Reviewing: the game underneath must not change, so pieces only move
+        // while the coach is asking you to find something.
+        if (mode === "review") return challengeOpen && piece.pieceType[0] === turn;
         if (mode !== "train") return true;
         if (!userChar) return false;
         return piece.pieceType[0] === userChar && turn === userChar;
@@ -286,7 +380,9 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
           pc != null &&
           (mode === "train"
             ? userChar != null && pc === userChar && turn === userChar
-            : pc === turn);
+            : mode === "review"
+              ? challengeOpen && pc === turn
+              : pc === turn);
         setMoveFrom(canSelect ? square : null);
       },
     }),
@@ -302,6 +398,7 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
       turn,
       playMove,
       moveFrom,
+      challengeOpen,
     ],
   );
 
@@ -391,7 +488,19 @@ export function BoardPanel({ evaluation, engineStatus, engineEnabled }: Props) {
         </div>
 
         <div className="ml-auto text-xs text-slate-400">
-          <EngineStatusBadge status={engineStatus} enabled={engineEnabled} evaluation={evalMatches ? evaluation : null} />
+          {mode === "review" ? (
+            <span className="text-slate-500">
+              {review
+                ? `Reviewed at depth ${review.depth}`
+                : "Review engine starting…"}
+            </span>
+          ) : (
+            <EngineStatusBadge
+              status={engineStatus}
+              enabled={engineEnabled}
+              evaluation={evalMatches ? evaluation : null}
+            />
+          )}
         </div>
       </div>
     </div>
