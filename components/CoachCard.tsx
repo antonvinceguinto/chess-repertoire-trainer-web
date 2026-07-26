@@ -28,23 +28,48 @@ function label(move: MoveReview): string {
  */
 export function CoachCard({ move, isUser, analyzing }: Props) {
   const {
+    ply,
     reviewChallenge,
     startChallenge,
     endChallenge,
     playVariation,
     inVariation,
+    branchSource,
     restoreGame,
   } = useTrainer();
 
+  // The challenge must be checked *before* inVariation: answering commits the
+  // move, which forks a branch, and the variation card would otherwise swallow
+  // the correct/wrong verdict.
+  if (reviewChallenge && move && reviewChallenge.index === move.index) {
+    return (
+      <ChallengeCard
+        move={move}
+        status={reviewChallenge.status}
+        lastWrong={reviewChallenge.lastWrong}
+        atPuzzle={ply === reviewChallenge.index}
+        onRetry={() =>
+          startChallenge(reviewChallenge.index, reviewChallenge.bestSan)
+        }
+        onGiveUp={() => playVariation(move.index, move.bestPv)}
+        onDismiss={endChallenge}
+      />
+    );
+  }
+
   if (inVariation) {
+    const fromEngine = branchSource === "engine";
     return (
       <div className="rounded-lg border border-sky-800/70 bg-sky-950/30 p-3">
         <p className="text-[13px] font-semibold text-sky-200">
-          This is the line the engine wanted.
+          {fromEngine
+            ? "This is the line the engine wanted."
+            : "You're off the game, playing your own line."}
         </p>
         <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-          Step through it with the arrow keys, then head back to what actually
-          happened in your game.
+          {fromEngine
+            ? "Step through it with the arrow keys — or take over and play your own moves; Stockfish scores every one."
+            : "Keep playing and Stockfish scores each move as you go — watch the eval bar and the green arrow. Your game is untouched underneath."}
         </p>
         <Button
           variant="secondary"
@@ -54,18 +79,6 @@ export function CoachCard({ move, isUser, analyzing }: Props) {
           ← Back to the game
         </Button>
       </div>
-    );
-  }
-
-  if (reviewChallenge && move && reviewChallenge.index === move.index) {
-    return (
-      <ChallengeCard
-        move={move}
-        status={reviewChallenge.status}
-        lastWrong={reviewChallenge.lastWrong}
-        onGiveUp={() => playVariation(move.index, move.bestPv)}
-        onDismiss={endChallenge}
-      />
     );
   }
 
@@ -205,19 +218,35 @@ function Heading({
   );
 }
 
+/**
+ * "Now you try". Your answer lands on the board whether it's right or wrong, so
+ * this card also owns the way back: retry re-parks the puzzle, and dismissing
+ * puts the real game back.
+ */
 function ChallengeCard({
   move,
   status,
   lastWrong,
+  atPuzzle,
+  onRetry,
   onGiveUp,
   onDismiss,
 }: {
   move: MoveReview;
   status: "waiting" | "correct" | "wrong";
   lastWrong: string | null;
+  /** Whether the board is still on the puzzle position. */
+  atPuzzle: boolean;
+  onRetry: () => void;
   onGiveUp: () => void;
   onDismiss: () => void;
 }) {
+  const dismiss = (
+    <Button variant="ghost" onClick={onDismiss} className="!py-1.5 text-xs">
+      ✕ Done
+    </Button>
+  );
+
   return (
     <div className="rounded-lg border border-emerald-800/60 bg-emerald-950/25 p-3">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
@@ -226,44 +255,90 @@ function ChallengeCard({
       <p className="mt-1 text-[13px] font-semibold leading-snug text-slate-100">
         You played {move.san} here. Find the move you should have played.
       </p>
-      <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
-        Play it on the board — the game stays where it is either way.
-      </p>
 
-      {status === "correct" && (
-        <p className="mt-2 rounded-md bg-emerald-600/20 px-2.5 py-2 text-[12px] font-semibold text-emerald-200">
-          ✓ That&apos;s it — {move.bestSan} is the move.
-        </p>
+      {status === "correct" ? (
+        <>
+          <p className="mt-2 rounded-md bg-emerald-600/20 px-2.5 py-2 text-[12px] font-semibold text-emerald-200">
+            ✓ That&apos;s it — {move.bestSan} is the move.
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+            It&apos;s on the board — play on from here to see how it goes, or
+            watch the engine&apos;s line.
+          </p>
+          <div className="mt-2 flex gap-1.5">
+            <Button
+              variant="primary"
+              onClick={onGiveUp}
+              disabled={move.bestPv.length === 0}
+              className="flex-1 !py-1.5 text-xs"
+            >
+              ▶ See the follow-up
+            </Button>
+            {dismiss}
+          </div>
+        </>
+      ) : status === "wrong" ? (
+        <>
+          <p className="mt-2 rounded-md bg-rose-600/15 px-2.5 py-2 text-[12px] text-rose-200">
+            {lastWrong === move.san
+              ? `${lastWrong} is the move you actually played — there's a better one.`
+              : `${lastWrong} isn't it.`}{" "}
+            Look for the most forcing option — check every capture and check
+            first. It&apos;s on the board with the engine live, so you can see
+            what it gives up.
+          </p>
+          <div className="mt-2 flex gap-1.5">
+            <Button
+              variant="primary"
+              onClick={onRetry}
+              className="flex-1 !py-1.5 text-xs"
+            >
+              ↺ Try again
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={onGiveUp}
+              className="!py-1.5 text-xs"
+            >
+              Show me
+            </Button>
+            {dismiss}
+          </div>
+        </>
+      ) : !atPuzzle ? (
+        <>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+            You&apos;ve stepped away from the puzzle position.
+          </p>
+          <div className="mt-2 flex gap-1.5">
+            <Button
+              variant="primary"
+              onClick={onRetry}
+              className="flex-1 !py-1.5 text-xs"
+            >
+              ← Back to the puzzle
+            </Button>
+            {dismiss}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+            Play it on the board — right or wrong, your move lands, and your game
+            is one click away.
+          </p>
+          <div className="mt-2 flex gap-1.5">
+            <Button
+              variant="secondary"
+              onClick={onGiveUp}
+              className="flex-1 !py-1.5 text-xs"
+            >
+              Show me
+            </Button>
+            {dismiss}
+          </div>
+        </>
       )}
-      {status === "wrong" && (
-        <p className="mt-2 rounded-md bg-rose-600/15 px-2.5 py-2 text-[12px] text-rose-200">
-          {lastWrong} isn&apos;t it. Look for the most forcing option — check
-          every capture and check first.
-        </p>
-      )}
-
-      <div className="mt-2 flex gap-1.5">
-        {status === "correct" ? (
-          <Button
-            variant="primary"
-            onClick={onGiveUp}
-            className="flex-1 !py-1.5 text-xs"
-          >
-            ▶ See the follow-up
-          </Button>
-        ) : (
-          <Button
-            variant="secondary"
-            onClick={onGiveUp}
-            className="flex-1 !py-1.5 text-xs"
-          >
-            Show me
-          </Button>
-        )}
-        <Button variant="ghost" onClick={onDismiss} className="!py-1.5 text-xs">
-          ✕ Done
-        </Button>
-      </div>
     </div>
   );
 }

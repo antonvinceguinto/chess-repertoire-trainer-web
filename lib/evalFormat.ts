@@ -3,6 +3,9 @@ import type { EngineLine } from "./types";
 /** Format an engine line's score from White's perspective, e.g. "+1.35", "-0.42", "M5", "-M3". */
 export function formatScore(line: Pick<EngineLine, "type" | "value" | "scoreWhite">): string {
   if (line.type === "mate") {
+    // Mate already on the board (synthesised for a finished position, since
+    // Stockfish returns no line at all there) — no distance left to count.
+    if (line.value === 0) return line.scoreWhite >= 0 ? "#" : "-#";
     const sign = line.scoreWhite >= 0 ? "" : "-";
     return `${sign}M${Math.abs(line.value)}`;
   }

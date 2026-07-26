@@ -49,6 +49,7 @@ export function ChessTrainer() {
     reviewSession,
     startReview,
     exitReview,
+    inVariation,
   } = useTrainer();
   const book = useBookData();
 
@@ -109,8 +110,12 @@ export function ChessTrainer() {
   }, [book]);
 
   // Keep the engine running while fixing gaps even if the user turned it off,
-  // so the recommended reply always has an eval.
-  const engineEnabled = (engineOn || !!fixQueue) && mode === "build";
+  // so the recommended reply always has an eval. In review the sweep owns every
+  // number on the game itself — but inside a side line there is no sweep data at
+  // all, so the live engine takes over there, and only there.
+  const engineEnabled =
+    ((engineOn || !!fixQueue) && mode === "build") ||
+    (mode === "review" && inVariation);
   const { status, evaluation } = useEngine(fen, engineEnabled, multipv);
   const {
     gaps,

@@ -47,8 +47,14 @@ export function ReviewPanel({
   depthId,
   onDepthChange,
 }: Props) {
-  const { reviewSession, reviewChallenge, ply, closeReviewGame, restoreGame } =
-    useTrainer();
+  const {
+    reviewSession,
+    reviewChallenge,
+    ply,
+    variationFrom,
+    closeReviewGame,
+    restoreGame,
+  } = useTrainer();
   const [view, setView] = useState<View>("summary");
 
   const userTurn: Turn = useMemo(
@@ -63,6 +69,10 @@ export function ReviewPanel({
 
   if (!reviewSession) return null;
 
+  // Inside a side line the cursor indexes the branch, not the game — so anything
+  // that describes the game anchors to the ply the branch forked from.
+  const gamePly = variationFrom ?? ply;
+
   const { source, game, username } = reviewSession;
   const color = colorOf(source, username) ?? "white";
   const me = color === "white" ? source.white : source.black;
@@ -73,8 +83,8 @@ export function ReviewPanel({
   // coach should still be talking about that move rather than the previous one.
   const currentMove: MoveReview | null = reviewChallenge
     ? review?.moves[reviewChallenge.index] ?? null
-    : ply >= 1
-      ? review?.moves[ply - 1] ?? null
+    : gamePly >= 1
+      ? review?.moves[gamePly - 1] ?? null
       : null;
 
   const mySummary = review
@@ -90,8 +100,8 @@ export function ReviewPanel({
 
   const jumpTo = (target: number) => restoreGame(target);
 
-  const prevMistake = mistakes.filter((m) => m.ply < ply).pop() ?? null;
-  const nextMistake = mistakes.find((m) => m.ply > ply) ?? null;
+  const prevMistake = mistakes.filter((m) => m.ply < gamePly).pop() ?? null;
+  const nextMistake = mistakes.find((m) => m.ply > gamePly) ?? null;
 
   return (
     <Panel>
@@ -262,14 +272,14 @@ export function ReviewPanel({
               <EvalGraph
                 moves={review.moves}
                 userColor={color}
-                ply={ply}
+                ply={gamePly}
                 onSelect={jumpTo}
               />
             )}
 
             <KeyMoments
               mistakes={mistakes}
-              ply={ply}
+              ply={gamePly}
               onJump={jumpTo}
               running={progress.running}
             />
@@ -279,7 +289,7 @@ export function ReviewPanel({
         ) : (
           <AnnotatedMoves
             review={review}
-            ply={ply}
+            ply={gamePly}
             userTurn={userTurn}
             onJump={jumpTo}
           />
