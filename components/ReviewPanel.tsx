@@ -116,7 +116,7 @@ export function ReviewPanel({
           <button
             type="button"
             onClick={closeReviewGame}
-            className="rounded px-1.5 py-0.5 text-[11px] font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
+            className="rounded px-1.5 py-0.5 text-[12px] lg:text-[13px] font-medium text-slate-400 transition hover:bg-slate-800 hover:text-slate-200"
           >
             ← All games
           </button>
@@ -132,7 +132,7 @@ export function ReviewPanel({
               : "border-slate-600 bg-slate-900"
           }`}
         />
-        <span className="min-w-0 flex-1 truncate text-[12px] text-slate-300">
+        <span className="min-w-0 flex-1 truncate text-[13px] lg:text-[14px] text-slate-300">
           <span className="font-semibold text-slate-100">{me.username}</span>
           {me.rating != null && (
             <span className="text-slate-500"> {me.rating}</span>
@@ -148,12 +148,12 @@ export function ReviewPanel({
           target="_blank"
           rel="noreferrer noopener"
           title="Open on Chess.com"
-          className="shrink-0 text-[10px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+          className="shrink-0 text-[11px] lg:text-[12px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
         >
           ↗
         </a>
       </div>
-      <div className="border-b border-slate-800 px-3 py-1.5 text-[10px] text-slate-500">
+      <div className="border-b border-slate-800 px-3 py-1.5 text-[11px] lg:text-[12px] text-slate-500">
         <span
           className={
             outcome === "win"
@@ -172,13 +172,13 @@ export function ReviewPanel({
       </div>
 
       {progress.failed ? (
-        <p className="px-3 py-2 text-[11px] text-rose-400">
+        <p className="px-3 py-2 text-[12px] lg:text-[13px] text-rose-400">
           Stockfish couldn&apos;t start, so this game can&apos;t be reviewed.
         </p>
       ) : (
         progress.running && (
           <div className="border-b border-slate-800 px-3 py-2">
-            <div className="flex items-center justify-between text-[10px] text-slate-500">
+            <div className="flex items-center justify-between text-[11px] lg:text-[12px] text-slate-500">
               <span className="animate-soft-pulse">
                 Reviewing with Stockfish…
               </span>
@@ -218,7 +218,7 @@ export function ReviewPanel({
               variant="secondary"
               onClick={() => prevMistake && jumpTo(prevMistake.ply)}
               disabled={!prevMistake}
-              className="flex-1 !py-1 text-[11px]"
+              className="flex-1 !py-1 text-[12px] lg:text-[13px]"
             >
               ← Previous mistake
             </Button>
@@ -226,14 +226,14 @@ export function ReviewPanel({
               variant="secondary"
               onClick={() => nextMistake && jumpTo(nextMistake.ply)}
               disabled={!nextMistake}
-              className="flex-1 !py-1 text-[11px]"
+              className="flex-1 !py-1 text-[12px] lg:text-[13px]"
             >
               Next mistake →
             </Button>
           </div>
         )}
 
-        <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1 text-sm">
+        <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1 text-sm lg:text-[15px]">
           {(
             [
               ["summary", "Summary"],
@@ -244,7 +244,7 @@ export function ReviewPanel({
               key={v}
               type="button"
               onClick={() => setView(v)}
-              className={`flex-1 rounded-md px-3 py-1.5 text-[13px] font-medium transition ${
+              className={`flex-1 rounded-md px-3 py-1.5 text-[14px] lg:text-[15px] font-medium transition ${
                 view === v
                   ? "bg-slate-700 text-white"
                   : "text-slate-400 hover:text-slate-200"
@@ -333,14 +333,14 @@ function AccuracyCard({
           : "border-slate-800 bg-slate-900/40"
       }`}
     >
-      <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+      <p className="truncate text-[11px] lg:text-[12px] font-semibold uppercase tracking-wide text-slate-500">
         {title}
       </p>
       <p className={`mt-0.5 text-2xl font-bold tabular-nums ${tone}`}>
         {accuracy.toFixed(1)}
-        <span className="text-sm font-medium text-slate-600">%</span>
+        <span className="text-sm lg:text-[15px] font-medium text-slate-600">%</span>
       </p>
-      <p className="text-[10px] text-slate-500">
+      <p className="text-[11px] lg:text-[12px] text-slate-500">
         {accuracyLabel(accuracy)} · {acpl} cp lost / move
       </p>
     </div>
@@ -361,7 +361,7 @@ function ClassBreakdown({
         return (
           <li
             key={c}
-            className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-medium ${meta.bg} ${meta.text}`}
+            className={`flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] lg:text-[13px] font-medium ${meta.bg} ${meta.text}`}
           >
             <span className="font-mono">{meta.glyph}</span>
             <span className="tabular-nums">{summary.counts[c]}</span>
@@ -386,7 +386,7 @@ function KeyMoments({
 }) {
   if (mistakes.length === 0) {
     return (
-      <p className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-3 text-center text-[11px] leading-relaxed text-slate-500">
+      <p className="rounded-md border border-slate-800 bg-slate-900/40 px-3 py-3 text-center text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
         {running
           ? "Looking for mistakes…"
           : "✓ No inaccuracies, mistakes or blunders from you in this game."}
@@ -395,7 +395,7 @@ function KeyMoments({
   }
   return (
     <div>
-      <p className="mb-1 px-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+      <p className="mb-1 px-0.5 text-[11px] lg:text-[12px] font-semibold uppercase tracking-wide text-slate-500">
         Your mistakes ({mistakes.length})
       </p>
       <ul className="flex flex-col gap-1">
@@ -414,18 +414,18 @@ function KeyMoments({
                 }`}
               >
                 <span
-                  className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${meta.bg} ${meta.text}`}
+                  className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] lg:text-[11px] font-bold uppercase tracking-wide ${meta.bg} ${meta.text}`}
                 >
                   {meta.glyph}
                 </span>
-                <span className="w-20 shrink-0 font-mono text-[12px] text-slate-100">
+                <span className="w-20 shrink-0 font-mono text-[13px] lg:text-[14px] text-slate-100">
                   {formatMoveSequence(m.fenBefore, [m.san])}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500">
+                <span className="min-w-0 flex-1 truncate text-[12px] lg:text-[13px] text-slate-500">
                   {meta.label}
                   {m.bestSan && m.bestSan !== m.san && ` · best ${m.bestSan}`}
                 </span>
-                <span className="shrink-0 font-mono text-[11px] tabular-nums text-rose-300">
+                <span className="shrink-0 font-mono text-[12px] lg:text-[13px] tabular-nums text-rose-300">
                   −{Math.round(m.winDrop)}%
                 </span>
               </button>
@@ -450,7 +450,7 @@ function AnnotatedMoves({
 }) {
   if (!review || review.moves.length === 0) {
     return (
-      <p className="animate-soft-pulse py-6 text-center text-xs text-slate-500">
+      <p className="animate-soft-pulse py-6 text-center text-[13px] lg:text-sm text-slate-500">
         Waiting for the first evaluations…
       </p>
     );
@@ -461,7 +461,7 @@ function AnnotatedMoves({
         <button
           type="button"
           onClick={() => onJump(0)}
-          className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+          className={`rounded px-1.5 py-0.5 text-[13px] lg:text-sm font-medium ${
             ply === 0
               ? "bg-emerald-600 text-white"
               : "text-slate-400 hover:bg-slate-800"
@@ -476,7 +476,7 @@ function AnnotatedMoves({
           return (
             <span key={m.index} className="inline-flex items-center">
               {isWhite && (
-                <span className="mr-0.5 select-none text-xs tabular-nums text-slate-500">
+                <span className="mr-0.5 select-none text-[13px] lg:text-sm tabular-nums text-slate-500">
                   {Math.floor(m.index / 2) + 1}.
                 </span>
               )}
@@ -486,7 +486,7 @@ function AnnotatedMoves({
                 title={`${meta.label}${
                   m.bestSan && m.bestSan !== m.san ? ` · best ${m.bestSan}` : ""
                 }`}
-                className={`rounded px-1.5 py-0.5 font-mono text-[13px] transition ${
+                className={`rounded px-1.5 py-0.5 font-mono text-[14px] lg:text-[15px] transition ${
                   active
                     ? "bg-emerald-600 text-white"
                     : `${m.color === userTurn ? meta.text : "text-slate-400"} hover:bg-slate-800`
@@ -498,7 +498,7 @@ function AnnotatedMoves({
                     move is just noise, so they stay bare. */}
                 {m.classification !== "good" &&
                   m.classification !== "excellent" && (
-                    <span className="ml-0.5 text-[10px]">{meta.glyph}</span>
+                    <span className="ml-0.5 text-[11px] lg:text-[12px]">{meta.glyph}</span>
                   )}
               </button>
             </span>
@@ -520,8 +520,8 @@ function DepthSelector({
   return (
     <div className="border-t border-slate-800 pt-2">
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-[11px] text-slate-500">Depth</span>
-        <div className="flex flex-1 rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[11px]">
+        <span className="shrink-0 text-[12px] lg:text-[13px] text-slate-500">Depth</span>
+        <div className="flex flex-1 rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[12px] lg:text-[13px]">
           {REVIEW_DEPTHS.map((d) => (
             <button
               key={d.id}
@@ -540,7 +540,7 @@ function DepthSelector({
         </div>
       </div>
       {active && (
-        <p className="mt-1 text-[10px] text-slate-600">
+        <p className="mt-1 text-[11px] lg:text-[12px] text-slate-600">
           {active.blurb}. Changing this re-runs the review.
         </p>
       )}

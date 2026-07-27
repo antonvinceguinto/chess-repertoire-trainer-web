@@ -8,14 +8,14 @@ export function RepertoireTree() {
 
   if (!activeRepertoire) {
     return (
-      <p className="px-2 py-6 text-center text-xs text-slate-500">
+      <p className="px-2 py-6 text-center text-[13px] lg:text-sm text-slate-500">
         Create a repertoire to start saving lines.
       </p>
     );
   }
   if (activeRepertoire.root.length === 0) {
     return (
-      <p className="px-2 py-6 text-center text-xs text-slate-500">
+      <p className="px-2 py-6 text-center text-[13px] lg:text-sm text-slate-500">
         No moves saved yet. Explore on the board and use ＋ on an engine or
         explorer move — or “Save line”.
       </p>
@@ -85,11 +85,11 @@ function NodeRow({
           className="flex min-w-0 flex-1 items-baseline gap-1 text-left"
           title={node.comment || "Go to this position"}
         >
-          <span className="select-none text-[10px] tabular-nums text-slate-500">
+          <span className="select-none text-[11px] lg:text-[12px] tabular-nums text-slate-500">
             {prefix}
           </span>
           <span
-            className={`font-mono text-[13px] ${
+            className={`font-mono text-[14px] lg:text-[15px] ${
               isCurrent
                 ? "text-white"
                 : onPath
@@ -100,7 +100,7 @@ function NodeRow({
             {node.san}
           </span>
           {node.comment && (
-            <span className="truncate text-[11px] italic text-slate-500">
+            <span className="truncate text-[12px] lg:text-[13px] italic text-slate-500">
               {node.comment}
             </span>
           )}
@@ -108,7 +108,7 @@ function NodeRow({
         <button
           type="button"
           onClick={() => removeRepertoireLine(path)}
-          className="shrink-0 rounded px-1 text-base text-slate-500 opacity-100 transition hover:text-rose-400 hoverable:text-xs hoverable:opacity-0 hoverable:group-hover:opacity-100"
+          className="shrink-0 rounded px-1 text-base text-slate-500 opacity-100 transition hover:text-rose-400 hoverable:text-[13px] lg:text-sm hoverable:opacity-0 hoverable:group-hover:opacity-100"
           title="Delete this move and everything after it"
         >
           ✕

@@ -6,9 +6,10 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactElement,
   type ReactNode,
 } from "react";
-import { Chessboard } from "react-chessboard";
+import { Chessboard, defaultPieces } from "react-chessboard";
 import { useTrainer } from "@/context/TrainerContext";
 import { legalMoves, tryMove } from "@/lib/chess";
 import type { Classification } from "@/lib/classify";
@@ -63,6 +64,38 @@ type BoardTheme = keyof typeof BOARD_THEMES;
 const BOARD_THEME_ORDER: BoardTheme[] = ["green", "brown", "blue"];
 const DEFAULT_THEME: BoardTheme = "green";
 const BOARD_THEME_KEY = "chess-board-theme";
+
+/**
+ * Piece styles. "standard" is the set react-chessboard draws itself; the rest
+ * are real, separately drawn sets served from `public/pieces/<dir>/<piece>.svg`
+ * (see the NOTICE there for authors and licences).
+ *
+ * They are rendered as <img> rather than inlined: several of these sets define
+ * gradients under short ids like "a", and inlining them would collide those ids
+ * across pieces and render them as black silhouettes. One document per file
+ * keeps each set's ids to itself.
+ */
+const PIECE_SETS = {
+  standard: { label: "Standard", dir: null },
+  classic: { label: "Classic", dir: "merida" },
+  maestro: { label: "Maestro", dir: "maestro" },
+  staunty: { label: "Staunty", dir: "staunty" },
+} as const;
+type PieceSet = keyof typeof PIECE_SETS;
+const PIECE_SET_ORDER: PieceSet[] = ["standard", "classic", "maestro", "staunty"];
+const DEFAULT_PIECE_SET: PieceSet = "standard";
+const PIECE_SET_KEY = "chess-piece-set";
+const PIECE_KEYS = [
+  "wK", "wQ", "wR", "wB", "wN", "wP",
+  "bK", "bQ", "bR", "bB", "bN", "bP",
+] as const;
+
+/** Props react-chessboard hands each piece renderer. */
+type PieceRenderProps = {
+  fill?: string;
+  square?: string;
+  svgStyle?: CSSProperties;
+};
 
 const MIN_BOARD = 320;
 const MAX_BOARD = 900;
@@ -194,8 +227,9 @@ export function BoardPanel({
   const [size, setSize] = useState(DEFAULT_BOARD);
   const [resizing, setResizing] = useState(false);
 
-  // Board colour scheme (persisted across sessions).
+  // Board colour scheme and piece style (both persisted across sessions).
   const [theme, setTheme] = useState<BoardTheme>(DEFAULT_THEME);
+  const [pieceSet, setPieceSet] = useState<PieceSet>(DEFAULT_PIECE_SET);
 
   useEffect(() => {
     const saved = Number(window.localStorage.getItem(BOARD_SIZE_KEY));
@@ -203,6 +237,10 @@ export function BoardPanel({
     const savedTheme = window.localStorage.getItem(BOARD_THEME_KEY);
     if (savedTheme && savedTheme in BOARD_THEMES) {
       setTheme(savedTheme as BoardTheme);
+    }
+    const savedPieces = window.localStorage.getItem(PIECE_SET_KEY);
+    if (savedPieces && savedPieces in PIECE_SETS) {
+      setPieceSet(savedPieces as PieceSet);
     }
   }, []);
 
@@ -214,6 +252,37 @@ export function BoardPanel({
       /* ignore */
     }
   };
+
+  const selectPieceSet = (name: PieceSet) => {
+    setPieceSet(name);
+    try {
+      window.localStorage.setItem(PIECE_SET_KEY, name);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Swap in a downloaded set. `undefined` leaves the board drawing its own.
+  const pieces = useMemo(() => {
+    const dir = PIECE_SETS[pieceSet].dir;
+    if (!dir) return undefined;
+    const out: Record<string, (props?: PieceRenderProps) => ReactElement> = {};
+    for (const key of PIECE_KEYS) {
+      out[key] = (props?: PieceRenderProps) => (
+        // next/image does not optimise SVG and would wrap each piece in its own
+        // sized container, which the board already owns — a plain img is right.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/pieces/${dir}/${key}.svg`}
+          alt=""
+          // The board owns dragging; native image drag would fight it.
+          draggable={false}
+          style={{ width: "100%", height: "100%", ...props?.svgStyle }}
+        />
+      );
+    }
+    return out;
+  }, [pieceSet]);
 
   const startResize = (e: ReactPointerEvent) => {
     e.preventDefault();
@@ -483,6 +552,7 @@ export function BoardPanel({
       lightSquareStyle: { backgroundColor: BOARD_THEMES[theme].light },
       squareStyles,
       arrows,
+      pieces,
       id: "trainer-board",
       squareRenderer,
       canDragPiece: ({ piece }: { piece: { pieceType: string } }) => {
@@ -565,6 +635,7 @@ export function BoardPanel({
       fen,
       orientation,
       theme,
+      pieces,
       squareStyles,
       arrows,
       squareRenderer,
@@ -671,6 +742,45 @@ export function BoardPanel({
                   background: `linear-gradient(135deg, ${t.light} 0 50%, ${t.dark} 50% 100%)`,
                 }}
               />
+            );
+          })}
+        </div>
+
+        <div className="mx-1 h-5 w-px bg-slate-700" />
+        <div className="flex items-center gap-1" role="group" aria-label="Piece style">
+          {PIECE_SET_ORDER.map((name) => {
+            const set = PIECE_SETS[name];
+            const active = pieceSet === name;
+            const Knight = defaultPieces.wN;
+            return (
+              <button
+                key={name}
+                type="button"
+                onClick={() => selectPieceSet(name)}
+                title={`${set.label} pieces`}
+                aria-label={`${set.label} pieces`}
+                aria-pressed={active}
+                className={`flex h-6 w-6 items-center justify-center rounded-md border bg-slate-700 transition ${
+                  active
+                    ? "border-emerald-400 ring-2 ring-emerald-400/70"
+                    : "border-slate-600 hover:border-slate-400"
+                }`}
+              >
+                {/* Preview each style with its own knight. */}
+                <span className="block h-[18px] w-[18px]">
+                  {set.dir ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/pieces/${set.dir}/wN.svg`}
+                      alt=""
+                      draggable={false}
+                      style={{ width: "100%", height: "100%" }}
+                    />
+                  ) : (
+                    <Knight />
+                  )}
+                </span>
+              </button>
             );
           })}
         </div>

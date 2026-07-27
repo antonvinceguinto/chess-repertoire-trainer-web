@@ -89,33 +89,33 @@ export function TrainPanel({
     <Panel className="p-3">
       <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <h2 className="text-sm font-semibold text-slate-100">
+          <h2 className="text-sm lg:text-[15px] font-semibold text-slate-100">
             Training · {activeRepertoire.name}
           </h2>
-          <p className="text-[11px] text-slate-500">
+          <p className="text-[12px] lg:text-[13px] text-slate-500">
             Playing as {session.color}. Recall your moves from memory.
           </p>
         </div>
-        <div className="flex gap-3 text-center text-xs">
+        <div className="flex gap-3 text-center text-[13px] lg:text-sm">
           <div>
             <div className="font-bold tabular-nums text-emerald-400">
               {session.correct}
             </div>
-            <div className="text-[10px] uppercase text-slate-500">correct</div>
+            <div className="text-[11px] lg:text-[12px] uppercase text-slate-500">correct</div>
           </div>
           <div>
             <div className="font-bold tabular-nums text-rose-400">
               {session.mistakes}
             </div>
-            <div className="text-[10px] uppercase text-slate-500">missed</div>
+            <div className="text-[11px] lg:text-[12px] uppercase text-slate-500">missed</div>
           </div>
         </div>
       </div>
 
       {/* Thoroughness — how many of your lines to drill */}
       <div className="mb-3 flex items-center gap-2">
-        <span className="shrink-0 text-[11px] text-slate-500">Drill</span>
-        <div className="flex flex-1 rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[11px]">
+        <span className="shrink-0 text-[12px] lg:text-[13px] text-slate-500">Drill</span>
+        <div className="flex flex-1 rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[12px] lg:text-[13px]">
           {THOROUGHNESS_LEVELS.map((l) => (
             <button
               key={l.id}
@@ -133,7 +133,7 @@ export function TrainPanel({
           ))}
         </div>
         <span
-          className="shrink-0 text-[11px] tabular-nums text-slate-500"
+          className="shrink-0 text-[12px] lg:text-[13px] tabular-nums text-slate-500"
           title="Lines being drilled at this level, out of your whole repertoire"
         >
           {totalLines}/{repertoireLines}
@@ -143,7 +143,7 @@ export function TrainPanel({
       {/* Line progress */}
       {totalLines > 0 && (
         <div className="mb-3">
-          <div className="mb-1 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="mb-1 flex items-center justify-between text-[12px] lg:text-[13px] text-slate-400">
             <span>
               Line{" "}
               <span className="font-semibold text-slate-200">
@@ -164,19 +164,19 @@ export function TrainPanel({
         </div>
       )}
 
-      <div className={`rounded-lg border px-3 py-2.5 text-sm ${banner.tone}`}>
+      <div className={`rounded-lg border px-3 py-2.5 text-sm lg:text-[15px] ${banner.tone}`}>
         {banner.text}
       </div>
 
       {sequence && (
-        <p className="mt-3 rounded-md bg-slate-900/60 px-2 py-1.5 font-mono text-[13px] text-slate-300">
+        <p className="mt-3 rounded-md bg-slate-900/60 px-2 py-1.5 font-mono text-[14px] lg:text-[15px] text-slate-300">
           {sequence}
         </p>
       )}
 
       {session.revealed && expected && (
-        <div className="mt-3 rounded-md border border-emerald-700/40 bg-emerald-950/30 px-3 py-2 text-sm">
-          <span className="text-xs text-slate-400">Play here: </span>
+        <div className="mt-3 rounded-md border border-emerald-700/40 bg-emerald-950/30 px-3 py-2 text-sm lg:text-[15px]">
+          <span className="text-[13px] lg:text-sm text-slate-400">Play here: </span>
           <span className="font-mono font-semibold text-emerald-300">
             {expected}
           </span>
@@ -221,7 +221,7 @@ export function TrainPanel({
           <Button variant="ghost" onClick={prevTrainingLine} title="Previous line">
             ← Prev
           </Button>
-          <span className="flex-1 text-center text-[11px] tabular-nums text-slate-500">
+          <span className="flex-1 text-center text-[12px] lg:text-[13px] tabular-nums text-slate-500">
             {session.lineIndex + 1} / {totalLines}
           </span>
           <Button variant="ghost" onClick={nextTrainingLine} title="Next line">
@@ -234,7 +234,7 @@ export function TrainPanel({
         <button
           type="button"
           onClick={reshuffleTraining}
-          className="text-[11px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
+          className="text-[12px] lg:text-[13px] text-slate-500 underline-offset-2 hover:text-slate-300 hover:underline"
         >
           🔀 Reshuffle &amp; restart
         </button>
@@ -243,7 +243,7 @@ export function TrainPanel({
         </Button>
       </div>
 
-      <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+      <p className="mt-3 text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
         Drilling {totalLines} of {repertoireLines} line
         {repertoireLines === 1 ? "" : "s"} in random order — every line comes up
         once before any repeats.{" "}

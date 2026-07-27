@@ -131,10 +131,10 @@ export function TransferDialog({ onClose }: { onClose: () => void }) {
       >
         <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
           <div>
-            <h2 className="text-sm font-semibold text-slate-100">
+            <h2 className="text-sm lg:text-[15px] font-semibold text-slate-100">
               ⇅ Backup &amp; sync
             </h2>
-            <p className="text-[11px] text-slate-500">
+            <p className="text-[12px] lg:text-[13px] text-slate-500">
               Move your repertoires to another browser or device.
             </p>
           </div>
@@ -151,12 +151,12 @@ export function TransferDialog({ onClose }: { onClose: () => void }) {
         <div className="space-y-5 p-4">
           {/* Export */}
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <h3 className="text-[13px] lg:text-sm font-semibold uppercase tracking-wide text-slate-400">
               Export from this browser
             </h3>
             {hasData ? (
               <>
-                <p className="text-[11px] leading-relaxed text-slate-500">
+                <p className="text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
                   {repertoires.length} repertoire
                   {repertoires.length === 1 ? "" : "s"} · {totalLines} line
                   {totalLines === 1 ? "" : "s"}. Save a file, or copy a code to
@@ -181,12 +181,12 @@ export function TransferDialog({ onClose }: { onClose: () => void }) {
                     readOnly
                     value={syncCode}
                     onFocus={(e) => e.currentTarget.select()}
-                    className="h-20 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-[10px] leading-relaxed text-slate-300 scroll-thin"
+                    className="h-20 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-[11px] lg:text-[12px] leading-relaxed text-slate-300 scroll-thin"
                   />
                 )}
               </>
             ) : (
-              <p className="text-[11px] leading-relaxed text-slate-500">
+              <p className="text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
                 No repertoires in this browser yet — nothing to export. Import a
                 backup below to bring some in.
               </p>
@@ -197,11 +197,11 @@ export function TransferDialog({ onClose }: { onClose: () => void }) {
 
           {/* Import */}
           <section className="space-y-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <h3 className="text-[13px] lg:text-sm font-semibold uppercase tracking-wide text-slate-400">
               Import into this browser
             </h3>
 
-            <div className="flex items-center gap-2 rounded-lg bg-slate-800/40 p-1 text-xs">
+            <div className="flex items-center gap-2 rounded-lg bg-slate-800/40 p-1 text-[13px] lg:text-sm">
               {(
                 [
                   ["merge", "Merge"],
@@ -222,7 +222,7 @@ export function TransferDialog({ onClose }: { onClose: () => void }) {
                 </button>
               ))}
             </div>
-            <p className="text-[11px] leading-relaxed text-slate-500">
+            <p className="text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
               {mode === "merge"
                 ? "Adds new repertoires and merges lines into matching ones — nothing already here is overwritten."
                 : "Deletes everything in this browser and replaces it with the backup."}
@@ -233,10 +233,10 @@ export function TransferDialog({ onClose }: { onClose: () => void }) {
               type="file"
               accept="application/json,.json"
               onChange={(e) => onFile(e.target.files?.[0])}
-              className="block w-full text-xs text-slate-400 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-slate-100 hover:file:bg-slate-600"
+              className="block w-full text-[13px] lg:text-sm text-slate-400 file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-slate-700 file:px-3 file:py-1.5 file:text-[13px] lg:text-sm file:font-medium file:text-slate-100 hover:file:bg-slate-600"
             />
 
-            <div className="flex items-center gap-2 text-[10px] uppercase tracking-wide text-slate-600">
+            <div className="flex items-center gap-2 text-[11px] lg:text-[12px] uppercase tracking-wide text-slate-600">
               <span className="h-px flex-1 bg-slate-800" />
               or paste a sync code
               <span className="h-px flex-1 bg-slate-800" />
@@ -249,7 +249,7 @@ export function TransferDialog({ onClose }: { onClose: () => void }) {
                 setFeedback(null);
               }}
               placeholder="Paste a sync code (COR1.…) or backup JSON here"
-              className="h-20 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-[11px] leading-relaxed text-slate-200 placeholder:font-sans placeholder:text-slate-600 focus:border-emerald-600 focus:outline-none scroll-thin"
+              className="h-20 w-full resize-none rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 font-mono text-[12px] lg:text-[13px] leading-relaxed text-slate-200 placeholder:font-sans placeholder:text-slate-600 focus:border-emerald-600 focus:outline-none scroll-thin"
             />
             <Button
               variant="primary"
@@ -262,7 +262,7 @@ export function TransferDialog({ onClose }: { onClose: () => void }) {
 
             {feedback && (
               <p
-                className={`rounded-md px-2 py-1.5 text-xs ${
+                className={`rounded-md px-2 py-1.5 text-[13px] lg:text-sm ${
                   feedback.tone === "error"
                     ? "bg-rose-950/40 text-rose-300"
                     : "bg-emerald-950/40 text-emerald-300"

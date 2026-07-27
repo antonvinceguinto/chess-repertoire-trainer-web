@@ -22,7 +22,7 @@ export function RepertoirePanel() {
         title="Saved lines"
         right={
           hasLines ? (
-            <div className="flex rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[11px]">
+            <div className="flex rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[12px] lg:text-[13px]">
               {(["lines", "tree"] as View[]).map((v) => (
                 <button
                   key={v}
@@ -151,7 +151,7 @@ function LineRow({
     >
       <div className="flex items-start gap-2 p-2">
         <span
-          className="mt-0.5 shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-slate-400"
+          className="mt-0.5 shrink-0 rounded bg-slate-800 px-1.5 py-0.5 text-[11px] lg:text-[12px] font-bold tabular-nums text-slate-400"
           title={`Line ${index}`}
         >
           {index}
@@ -165,16 +165,16 @@ function LineRow({
         >
           <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
             {line.eco && (
-              <span className="font-mono text-[10px] text-slate-500">
+              <span className="font-mono text-[11px] lg:text-[12px] text-slate-500">
                 {line.eco}
               </span>
             )}
-            <span className="text-[13px] font-semibold text-slate-100">
+            <span className="text-[14px] lg:text-[15px] font-semibold text-slate-100">
               {title}
             </span>
             {extraMoves > 0 && (
               <span
-                className="text-[10px] text-slate-500"
+                className="text-[11px] lg:text-[12px] text-slate-500"
                 title="Moves beyond the named position"
               >
                 +{extraMoves}
@@ -182,9 +182,9 @@ function LineRow({
             )}
           </div>
           {showNameSub && (
-            <div className="text-[11px] text-slate-500">{line.name}</div>
+            <div className="text-[12px] lg:text-[13px] text-slate-500">{line.name}</div>
           )}
-          <div className="mt-0.5 font-mono text-[11px] leading-relaxed text-slate-400">
+          <div className="mt-0.5 font-mono text-[12px] lg:text-[13px] leading-relaxed text-slate-400">
             {sequence}
           </div>
         </button>
@@ -193,7 +193,7 @@ function LineRow({
           <button
             type="button"
             onClick={() => onEditToggle(!editing)}
-            className="rounded px-1 py-0.5 text-xs text-slate-500 transition hover:bg-slate-800 hover:text-slate-200 hoverable:opacity-0 hoverable:group-hover:opacity-100"
+            className="rounded px-1 py-0.5 text-[13px] lg:text-sm text-slate-500 transition hover:bg-slate-800 hover:text-slate-200 hoverable:opacity-0 hoverable:group-hover:opacity-100"
             title="Rename this line"
           >
             ✎
@@ -201,7 +201,7 @@ function LineRow({
           <button
             type="button"
             onClick={onDelete}
-            className="rounded px-1 py-0.5 text-xs text-slate-500 transition hover:bg-rose-950/40 hover:text-rose-400 hoverable:opacity-0 hoverable:group-hover:opacity-100"
+            className="rounded px-1 py-0.5 text-[13px] lg:text-sm text-slate-500 transition hover:bg-rose-950/40 hover:text-rose-400 hoverable:opacity-0 hoverable:group-hover:opacity-100"
             title="Delete this line"
           >
             ✕
@@ -220,9 +220,9 @@ function LineRow({
               if (e.key === "Escape") onEditToggle(false);
             }}
             onBlur={(e) => onRename(e.currentTarget.value.trim())}
-            className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-slate-100 placeholder:text-slate-600 focus:border-emerald-600 focus:outline-none"
+            className="w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[13px] lg:text-sm text-slate-100 placeholder:text-slate-600 focus:border-emerald-600 focus:outline-none"
           />
-          <p className="mt-1 text-[10px] text-slate-600">
+          <p className="mt-1 text-[11px] lg:text-[12px] text-slate-600">
             Enter to save · Esc to cancel · clear it to fall back to the opening
             name.
           </p>
@@ -234,7 +234,7 @@ function LineRow({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-3 py-6 text-center text-xs leading-relaxed text-slate-500">
+    <p className="px-3 py-6 text-center text-[13px] lg:text-sm leading-relaxed text-slate-500">
       {children}
     </p>
   );
