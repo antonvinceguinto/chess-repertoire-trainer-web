@@ -6,9 +6,10 @@ import {
   useState,
   type CSSProperties,
   type PointerEvent as ReactPointerEvent,
+  type ReactElement,
   type ReactNode,
 } from "react";
-import { Chessboard } from "react-chessboard";
+import { Chessboard, defaultPieces } from "react-chessboard";
 import { useTrainer } from "@/context/TrainerContext";
 import { legalMoves, tryMove } from "@/lib/chess";
 import type { Classification } from "@/lib/classify";
@@ -63,6 +64,32 @@ type BoardTheme = keyof typeof BOARD_THEMES;
 const BOARD_THEME_ORDER: BoardTheme[] = ["green", "brown", "blue"];
 const DEFAULT_THEME: BoardTheme = "green";
 const BOARD_THEME_KEY = "chess-board-theme";
+
+/**
+ * Piece styles. All of them draw the same Staunton silhouettes the board
+ * already ships (react-chessboard's set) — only the material changes, which is
+ * how chess.com's own sets differ from one another too. Nothing is redrawn, so
+ * every style stays as legible as the default at any board size, and the
+ * built-in detail marks (the knight's eye, the king's cross) keep their own
+ * contrast colours automatically.
+ */
+const PIECE_SETS = {
+  standard: { label: "Standard", white: "#ffffff", black: "#000000" },
+  classic: { label: "Classic", white: "#f7f1e4", black: "#2f2b26" },
+  wood: { label: "Wood", white: "#e7c79b", black: "#6a4527" },
+  ice: { label: "Ice", white: "#e9f2fb", black: "#41566f" },
+} as const;
+type PieceSet = keyof typeof PIECE_SETS;
+const PIECE_SET_ORDER: PieceSet[] = ["standard", "classic", "wood", "ice"];
+const DEFAULT_PIECE_SET: PieceSet = "standard";
+const PIECE_SET_KEY = "chess-piece-set";
+
+/** Props react-chessboard hands each piece renderer. */
+type PieceRenderProps = {
+  fill?: string;
+  square?: string;
+  svgStyle?: CSSProperties;
+};
 
 const MIN_BOARD = 320;
 const MAX_BOARD = 900;
@@ -194,8 +221,9 @@ export function BoardPanel({
   const [size, setSize] = useState(DEFAULT_BOARD);
   const [resizing, setResizing] = useState(false);
 
-  // Board colour scheme (persisted across sessions).
+  // Board colour scheme and piece style (both persisted across sessions).
   const [theme, setTheme] = useState<BoardTheme>(DEFAULT_THEME);
+  const [pieceSet, setPieceSet] = useState<PieceSet>(DEFAULT_PIECE_SET);
 
   useEffect(() => {
     const saved = Number(window.localStorage.getItem(BOARD_SIZE_KEY));
@@ -203,6 +231,10 @@ export function BoardPanel({
     const savedTheme = window.localStorage.getItem(BOARD_THEME_KEY);
     if (savedTheme && savedTheme in BOARD_THEMES) {
       setTheme(savedTheme as BoardTheme);
+    }
+    const savedPieces = window.localStorage.getItem(PIECE_SET_KEY);
+    if (savedPieces && savedPieces in PIECE_SETS) {
+      setPieceSet(savedPieces as PieceSet);
     }
   }, []);
 
@@ -214,6 +246,30 @@ export function BoardPanel({
       /* ignore */
     }
   };
+
+  const selectPieceSet = (name: PieceSet) => {
+    setPieceSet(name);
+    try {
+      window.localStorage.setItem(PIECE_SET_KEY, name);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  // Re-colour the board's own pieces. Each default piece takes a `fill` for its
+  // body paths, so tinting is all a style needs — the geometry, the outlines and
+  // the contrast details are the board's and stay untouched.
+  const pieces = useMemo(() => {
+    const set = PIECE_SETS[pieceSet];
+    if (pieceSet === DEFAULT_PIECE_SET) return undefined; // board's own colours
+    const out: Record<string, (props?: PieceRenderProps) => ReactElement> = {};
+    for (const key of Object.keys(defaultPieces)) {
+      const render = defaultPieces[key];
+      const fill = key[0] === "w" ? set.white : set.black;
+      out[key] = (props?: PieceRenderProps) => render({ ...props, fill });
+    }
+    return out;
+  }, [pieceSet]);
 
   const startResize = (e: ReactPointerEvent) => {
     e.preventDefault();
@@ -483,6 +539,7 @@ export function BoardPanel({
       lightSquareStyle: { backgroundColor: BOARD_THEMES[theme].light },
       squareStyles,
       arrows,
+      pieces,
       id: "trainer-board",
       squareRenderer,
       canDragPiece: ({ piece }: { piece: { pieceType: string } }) => {
@@ -565,6 +622,7 @@ export function BoardPanel({
       fen,
       orientation,
       theme,
+      pieces,
       squareStyles,
       arrows,
       squareRenderer,
@@ -671,6 +729,35 @@ export function BoardPanel({
                   background: `linear-gradient(135deg, ${t.light} 0 50%, ${t.dark} 50% 100%)`,
                 }}
               />
+            );
+          })}
+        </div>
+
+        <div className="mx-1 h-5 w-px bg-slate-700" />
+        <div className="flex items-center gap-1" role="group" aria-label="Piece style">
+          {PIECE_SET_ORDER.map((name) => {
+            const set = PIECE_SETS[name];
+            const active = pieceSet === name;
+            // Preview each style with the piece itself, in that style's colours.
+            const Knight = defaultPieces.wN;
+            return (
+              <button
+                key={name}
+                type="button"
+                onClick={() => selectPieceSet(name)}
+                title={`${set.label} pieces`}
+                aria-label={`${set.label} pieces`}
+                aria-pressed={active}
+                className={`flex h-6 w-6 items-center justify-center rounded-md border bg-slate-900 transition ${
+                  active
+                    ? "border-emerald-400 ring-2 ring-emerald-400/70"
+                    : "border-slate-600 hover:border-slate-400"
+                }`}
+              >
+                <span className="block h-[18px] w-[18px]">
+                  <Knight fill={set.white} />
+                </span>
+              </button>
             );
           })}
         </div>
