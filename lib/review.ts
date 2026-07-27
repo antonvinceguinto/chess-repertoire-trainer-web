@@ -1,4 +1,5 @@
 import { legalMoves, positionStatus, turnOf } from "./chess";
+import { moveSacrifice } from "./classify";
 import type { ChessComGame } from "./chesscom";
 import type { LoadedGame } from "./pgn";
 import type { Color, EngineEval, LineMove, Turn } from "./types";
@@ -20,6 +21,7 @@ const MATE_CP = 10000;
 
 export type MoveClass =
   | "book"
+  | "brilliant"
   | "best"
   | "great"
   | "excellent"
@@ -35,6 +37,19 @@ const INACCURACY = 5;
 const GOOD = 2;
 /** A "great" move is the best move when every alternative was much worse. */
 const ONLY_MOVE_GAP = 15;
+
+// A "brilliant" move is a sound sacrifice: it gives real material away on its
+// own destination square and the engine still likes the position. The material
+// test is the live move-review's (`moveSacrifice`, lib/classify.ts); the
+// tolerances around it are stated on this file's win-probability scale.
+/** Win% the move may give up and still count as brilliant. */
+const BRILLIANT_MAX_DROP = 2;
+/** How much material must be given up — an exchange or a minor piece. */
+const BRILLIANT_MIN_SAC = 180;
+/** The position must still be about equal afterwards (mover's centipawns). */
+const BRILLIANT_MIN_AFTER = -50;
+/** Cashing in an already-won position isn't brilliant (mover's centipawns). */
+const BRILLIANT_MAX_BEFORE = 700;
 
 /** The engine's verdict on a single position. */
 export interface PositionEval {
@@ -86,12 +101,18 @@ export interface MoveReview {
   bestPv: string[];
   /** The engine's line from the position the move actually reached. */
   playedPv: string[];
+  /** The runner-up in the position before the move, when MultiPV found one. */
+  secondSan: string | null;
+  /** That runner-up's score, from White's perspective. */
+  secondCpWhite: number | null;
   /** The position was still inside the bundled opening book. */
   book: boolean;
   /** Every alternative was much worse — this was the move to find. */
   onlyMove: boolean;
   /** No choice existed. */
   forced: boolean;
+  /** Material given up on this move's own square, in centipawns (0 normally). */
+  sacrifice: number;
 }
 
 export interface SideSummary {
@@ -219,10 +240,14 @@ function classify(opts: {
   book: boolean;
   onlyMove: boolean;
   forced: boolean;
+  brilliant: boolean;
 }): MoveClass {
-  const { playedSan, bestSan, winDrop, book, onlyMove, forced } = opts;
+  const { playedSan, bestSan, winDrop, book, onlyMove, forced, brilliant } = opts;
   if (book) return "book";
   if (forced) return "best";
+  // A sound sacrifice outranks "best": it is usually the top move as well, and
+  // "you gave up a piece and it works" is the more interesting thing to say.
+  if (brilliant) return "brilliant";
   if (bestSan && playedSan === bestSan) return onlyMove ? "great" : "best";
   if (winDrop >= BLUNDER) return "blunder";
   if (winDrop >= MISTAKE) return "mistake";
@@ -294,6 +319,7 @@ function gameAccuracy(accuracies: number[], weights: number[]): number {
 
 const emptyCounts = (): Record<MoveClass, number> => ({
   book: 0,
+  brilliant: 0,
   best: 0,
   great: 0,
   excellent: 0,
@@ -337,6 +363,23 @@ function summarize(
 }
 
 /* ---------------- The review itself ---------------- */
+
+/**
+ * `buildReview` re-derives the whole game every time a few more evaluations
+ * land, and the static exchange search behind `moveSacrifice` is the most
+ * expensive thing in its loop. A move's sacrifice never changes, so remember it
+ * for the session — the same trick the gap scorer uses for its evals.
+ */
+const sacrificeCache = new Map<string, number>();
+
+function sacrificeOf(fenBefore: string, move: LineMove): number {
+  const key = `${fenBefore}|${move.san}`;
+  const cached = sacrificeCache.get(key);
+  if (cached !== undefined) return cached;
+  const value = moveSacrifice(fenBefore, move);
+  sacrificeCache.set(key, value);
+  return value;
+}
 
 export interface BuildReviewInput {
   /** The game's half-moves, in order. */
@@ -385,6 +428,18 @@ export function buildReview(input: BuildReviewInput): GameReview {
       secondCp != null && winBefore - winPercent(secondCp) >= ONLY_MOVE_GAP;
     const forced = legalMoves(fenBefore).length === 1;
 
+    // Only moves that could still turn out brilliant are measured, and the
+    // measurement itself is cached — this loop runs again every time a few more
+    // evaluations arrive.
+    const sacrifice =
+      !book &&
+      !forced &&
+      winDrop <= BRILLIANT_MAX_DROP &&
+      playedCp >= BRILLIANT_MIN_AFTER &&
+      bestCp <= BRILLIANT_MAX_BEFORE
+        ? sacrificeOf(fenBefore, move)
+        : 0;
+
     const classification = classify({
       playedSan: move.san,
       bestSan: before.bestSan,
@@ -392,6 +447,7 @@ export function buildReview(input: BuildReviewInput): GameReview {
       book,
       onlyMove,
       forced,
+      brilliant: sacrifice >= BRILLIANT_MIN_SAC,
     });
 
     reviews.push({
@@ -415,9 +471,12 @@ export function buildReview(input: BuildReviewInput): GameReview {
       bestUci: before.bestUci,
       bestPv: before.pv,
       playedPv: after.pv,
+      secondSan: before.secondSan,
+      secondCpWhite: before.secondCpWhite,
       book,
       onlyMove,
       forced,
+      sacrifice,
     });
   }
 
@@ -439,6 +498,22 @@ export function isMistake(m: MoveReview): boolean {
   return MISTAKE_CLASSES.includes(m.classification);
 }
 
+/**
+ * The review of half-move `index`, or null while it has no verdict yet.
+ *
+ * `review.moves` holds only the half-moves both of whose positions the sweep has
+ * finished, and a repetition later in the game is filled the moment its earlier
+ * twin is searched — so mid-sweep the array can run ahead of the game and its
+ * positions stop matching half-move numbers. Always look a move up by `index`.
+ */
+export function moveAt(
+  review: GameReview | null,
+  index: number,
+): MoveReview | null {
+  if (!review || index < 0) return null;
+  return review.moves.find((m) => m.index === index) ?? null;
+}
+
 /** The moves a given side should study, worst first is *not* wanted — keep game order. */
 export function keyMoments(review: GameReview, side: Turn): MoveReview[] {
   return review.moves.filter((m) => m.color === side && isMistake(m));
@@ -456,6 +531,14 @@ export const CLASS_META: Record<
     disc: string;
   }
 > = {
+  brilliant: {
+    label: "Brilliant",
+    glyph: "!!",
+    text: "text-teal-300",
+    bg: "bg-teal-500/15",
+    dot: "bg-teal-400",
+    disc: "bg-teal-500",
+  },
   great: {
     label: "Great",
     glyph: "!",
@@ -524,6 +607,7 @@ export const CLASS_META: Record<
 
 /** Order used when listing the summary counts. */
 export const CLASS_ORDER: MoveClass[] = [
+  "brilliant",
   "great",
   "best",
   "excellent",

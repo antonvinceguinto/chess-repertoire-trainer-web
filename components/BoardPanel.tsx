@@ -12,7 +12,13 @@ import { Chessboard } from "react-chessboard";
 import { useTrainer } from "@/context/TrainerContext";
 import { legalMoves, tryMove } from "@/lib/chess";
 import type { Classification } from "@/lib/classify";
-import { terminalEval, type GameReview, type MoveClass } from "@/lib/review";
+import {
+  moveAt,
+  terminalEval,
+  type GameReview,
+  type MoveClass,
+  type MoveReview,
+} from "@/lib/review";
 import type { EngineEval, EngineLine, EngineStatus } from "@/lib/types";
 import { EvalBar } from "./EvalBar";
 import { MoveClassDisc } from "./MoveClassBadge";
@@ -43,6 +49,7 @@ const REVIEW_TINT: Record<MoveClass, string> = {
   excellent: "rgba(52, 211, 153, 0.40)",
   best: "rgba(34, 197, 94, 0.42)",
   great: "rgba(56, 189, 248, 0.45)",
+  brilliant: "rgba(45, 212, 191, 0.45)",
   book: "rgba(167, 139, 250, 0.40)",
 };
 
@@ -123,19 +130,26 @@ export function BoardPanel({
   // variation the moves are no longer the game's, so `review.moves[ply - 1]`
   // would label a different move — leave it unmarked there.
   const reviewedMove =
-    mode === "review" && review && !reviewChallenge && !inVariation && ply >= 1
-      ? review.moves[ply - 1] ?? null
+    mode === "review" && !reviewChallenge && !inVariation && ply >= 1
+      ? moveAt(review, ply - 1)
       : null;
 
   // The live engine is parked during review, so drive the eval bar from the
   // sweep's own numbers instead of leaving it stuck at 0.00.
   const reviewBestLine: EngineLine | null = useMemo(() => {
     if (mode !== "review" || inVariation || !review) return null;
-    const index = Math.min(ply, review.moves.length) - 1;
-    const move = index >= 0 ? review.moves[index] : review.moves[0];
+    // Mid-sweep the move under the cursor may have no verdict yet, so fall back
+    // to the latest one before it rather than blanking the bar. `moves` is in
+    // half-move order, so the last match is the closest one.
+    let judged: MoveReview | null = null;
+    for (const m of review.moves) {
+      if (m.index > ply - 1) break;
+      judged = m;
+    }
+    const move = judged ?? review.moves[0];
     if (!move) return null;
-    const scoreWhite = index >= 0 ? move.cpAfter : move.cpBefore;
-    const mate = index >= 0 ? move.mateAfter : move.mateBefore;
+    const scoreWhite = judged ? judged.cpAfter : move.cpBefore;
+    const mate = judged ? judged.mateAfter : move.mateBefore;
     return {
       multipv: 1,
       depth: review.depth,

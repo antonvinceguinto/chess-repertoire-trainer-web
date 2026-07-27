@@ -19,6 +19,7 @@ import {
   CLASS_META,
   CLASS_ORDER,
   keyMoments,
+  moveAt,
   type GameReview,
   type MoveReview,
 } from "@/lib/review";
@@ -52,6 +53,7 @@ export function ReviewPanel({
     reviewChallenge,
     ply,
     variationFrom,
+    variationOrigin,
     closeReviewGame,
     restoreGame,
   } = useTrainer();
@@ -70,8 +72,10 @@ export function ReviewPanel({
   if (!reviewSession) return null;
 
   // Inside a side line the cursor indexes the branch, not the game — so anything
-  // that describes the game anchors to the ply the branch forked from.
-  const gamePly = variationFrom ?? ply;
+  // that describes the game anchors to the move the coach opened the line to
+  // illustrate, or failing that to the ply the branch forked from.
+  const gamePly =
+    variationOrigin != null ? variationOrigin + 1 : variationFrom ?? ply;
 
   const { source, game, username } = reviewSession;
   const color = colorOf(source, username) ?? "white";
@@ -79,13 +83,14 @@ export function ReviewPanel({
   const them = color === "white" ? source.black : source.white;
   const outcome = outcomeOf(me.result);
 
-  // While a challenge is up the board sits *before* the flagged move, so the
-  // coach should still be talking about that move rather than the previous one.
-  const currentMove: MoveReview | null = reviewChallenge
-    ? review?.moves[reviewChallenge.index] ?? null
-    : gamePly >= 1
-      ? review?.moves[gamePly - 1] ?? null
-      : null;
+  // Which half-move the coach is talking about. A challenge parks the board
+  // *before* the flagged move, so the board's own ply would point at the
+  // previous one; `gamePly` already accounts for the side-line case.
+  const coachIndex = reviewChallenge ? reviewChallenge.index : gamePly - 1;
+  const currentMove: MoveReview | null = moveAt(review, coachIndex);
+  // The reply that followed in the game, so the coach can say whether a slip of
+  // the opponent's was actually punished.
+  const nextMove: MoveReview | null = moveAt(review, coachIndex + 1);
 
   const mySummary = review
     ? userTurn === "w"
@@ -201,6 +206,8 @@ export function ReviewPanel({
         <CoachCard
           move={currentMove}
           isUser={currentMove?.color === userTurn}
+          next={nextMove}
+          atStart={coachIndex < 0}
           analyzing={progress.running}
         />
 
