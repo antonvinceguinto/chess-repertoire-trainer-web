@@ -162,7 +162,7 @@ function playedLineOf(before: EngineEval, mv: LineMove): EngineLine | null {
  * move, so a piece left hanging by an earlier move can't smear "brilliant" onto
  * every follow-up.
  */
-function moveSacrifice(beforeFen: string, move: LineMove): number {
+export function moveSacrifice(beforeFen: string, move: LineMove): number {
   const before = queryBoard(beforeFen);
   const captured = before.get(move.to);
   let capturedValue = captured ? SEE_PIECE_VALUE[captured.type] ?? 0 : 0;
@@ -170,6 +170,13 @@ function moveSacrifice(beforeFen: string, move: LineMove): number {
   if (!captured && move.from[0] !== move.to[0]) {
     const moved = before.get(move.from);
     if (moved?.type === "p") capturedValue = SEE_PIECE_VALUE.p;
+  }
+  // A promotion is recaptured as a queen, but only a pawn was ever put at risk.
+  // Credit the upgrade as material the move created, or every promotion into a
+  // defended square would read as giving a queen away.
+  if (move.promotion) {
+    capturedValue +=
+      (SEE_PIECE_VALUE[move.promotion] ?? 0) - SEE_PIECE_VALUE.p;
   }
   const recapture = staticExchangeGain(move.fen, move.to);
   return Math.max(0, recapture - capturedValue);

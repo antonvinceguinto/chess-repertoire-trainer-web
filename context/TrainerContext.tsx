@@ -54,6 +54,20 @@ export type BranchSource = "engine" | "user";
 interface ReviewBranch {
   from: number;
   source: BranchSource;
+  /**
+   * The reviewed half-move this side line was opened to illustrate, so the coach
+   * keeps talking about that move while you explore its suggestion. Null for a
+   * line you struck out on your own, which illustrates nothing in particular.
+   */
+  origin: number | null;
+  /** How to name the side line in the UI, e.g. "Qd2". */
+  label: string | null;
+}
+
+/** Extra context for a side line the coach (rather than the user) opened. */
+export interface VariationOptions {
+  origin?: number;
+  label?: string;
 }
 
 interface TrainerContextValue {
@@ -138,11 +152,19 @@ interface TrainerContextValue {
   startChallenge: (index: number, bestSan: string) => void;
   endChallenge: () => void;
   /** Play a variation onto the board from `fromPly`, keeping the game restorable. */
-  playVariation: (fromPly: number, sans: string[]) => void;
+  playVariation: (
+    fromPly: number,
+    sans: string[],
+    options?: VariationOptions,
+  ) => void;
   /** True while a side line — the engine's or your own — has replaced part of the game. */
   inVariation: boolean;
   /** Half-move the side line forked from the game at; null when the game itself is up. */
   variationFrom: number | null;
+  /** The reviewed move the current side line illustrates, if it illustrates one. */
+  variationOrigin: number | null;
+  /** Readable name for the current side line, when it has one. */
+  variationLabel: string | null;
   /** Who built the current side line; null when the game itself is up. */
   branchSource: BranchSource | null;
   /** Put the reviewed game back on the board at `ply`. */
@@ -832,12 +854,15 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       stopAnimation();
       setReviewChallenge(null);
       setLine(game.moves);
-      setPly(
-        Math.max(0, Math.min(game.moves.length, toPly ?? variationFrom ?? 0)),
-      );
+      // Leaving a line the coach opened lands *on* the move it was explaining,
+      // so the card carries on about that move rather than the one before it.
+      // Any other side line just returns to the fork.
+      const fallback =
+        branch?.origin != null ? branch.origin + 1 : branch?.from ?? 0;
+      setPly(Math.max(0, Math.min(game.moves.length, toPly ?? fallback)));
       setBranch(null);
     },
-    [reviewSession, variationFrom, stopAnimation],
+    [reviewSession, branch, stopAnimation],
   );
 
   // Park the board on the position *before* a flagged move and wait for an
@@ -900,10 +925,18 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
         // advanceWith truncates at `ply`, so the fork is at most `ply`. Never
         // raise it: restoreGame() defaults to it, and everything that indexes
         // the game by it would otherwise land inside the discarded branch.
-        setBranch((b) => ({
-          from: b === null ? ply : Math.min(b.from, ply),
-          source: "user",
-        }));
+        setBranch((b) => {
+          const from = b === null ? ply : Math.min(b.from, ply);
+          // Taking over a coach line keeps it anchored to the move it explains,
+          // but stepping back *before* that move leaves it behind entirely.
+          const keeps = b?.origin != null && from >= b.origin;
+          return {
+            from,
+            source: "user",
+            origin: keeps ? b!.origin : null,
+            label: keeps ? b!.label : null,
+          };
+        });
       }
       return true;
     },
@@ -917,7 +950,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
    * should have done" is something you watch rather than read.
    */
   const playVariation = useCallback(
-    (fromPly: number, sans: string[]) => {
+    (fromPly: number, sans: string[], options?: VariationOptions) => {
       const base = reviewSession ? reviewSession.game.moves : line;
       stopAnimation();
       setReviewChallenge(null);
@@ -933,7 +966,12 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       if (extra.length === 0) return;
 
       setLine([...base.slice(0, fromPly), ...extra]);
-      setBranch({ from: fromPly, source: "engine" });
+      setBranch({
+        from: fromPly,
+        source: "engine",
+        origin: options?.origin ?? null,
+        label: options?.label ?? extra[0].san,
+      });
       setPly(fromPly);
 
       const total = fromPly + extra.length;
@@ -1009,6 +1047,8 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     playVariation,
     inVariation: branch !== null,
     variationFrom,
+    variationOrigin: branch?.origin ?? null,
+    variationLabel: branch?.label ?? null,
     branchSource: branch?.source ?? null,
     restoreGame,
   };
