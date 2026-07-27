@@ -66,23 +66,29 @@ const DEFAULT_THEME: BoardTheme = "green";
 const BOARD_THEME_KEY = "chess-board-theme";
 
 /**
- * Piece styles. All of them draw the same Staunton silhouettes the board
- * already ships (react-chessboard's set) — only the material changes, which is
- * how chess.com's own sets differ from one another too. Nothing is redrawn, so
- * every style stays as legible as the default at any board size, and the
- * built-in detail marks (the knight's eye, the king's cross) keep their own
- * contrast colours automatically.
+ * Piece styles. "standard" is the set react-chessboard draws itself; the rest
+ * are real, separately drawn sets served from `public/pieces/<dir>/<piece>.svg`
+ * (see the NOTICE there for authors and licences).
+ *
+ * They are rendered as <img> rather than inlined: several of these sets define
+ * gradients under short ids like "a", and inlining them would collide those ids
+ * across pieces and render them as black silhouettes. One document per file
+ * keeps each set's ids to itself.
  */
 const PIECE_SETS = {
-  standard: { label: "Standard", white: "#ffffff", black: "#000000" },
-  classic: { label: "Classic", white: "#f7f1e4", black: "#2f2b26" },
-  wood: { label: "Wood", white: "#e7c79b", black: "#6a4527" },
-  ice: { label: "Ice", white: "#e9f2fb", black: "#41566f" },
+  standard: { label: "Standard", dir: null },
+  classic: { label: "Classic", dir: "merida" },
+  maestro: { label: "Maestro", dir: "maestro" },
+  staunty: { label: "Staunty", dir: "staunty" },
 } as const;
 type PieceSet = keyof typeof PIECE_SETS;
-const PIECE_SET_ORDER: PieceSet[] = ["standard", "classic", "wood", "ice"];
+const PIECE_SET_ORDER: PieceSet[] = ["standard", "classic", "maestro", "staunty"];
 const DEFAULT_PIECE_SET: PieceSet = "standard";
 const PIECE_SET_KEY = "chess-piece-set";
+const PIECE_KEYS = [
+  "wK", "wQ", "wR", "wB", "wN", "wP",
+  "bK", "bQ", "bR", "bB", "bN", "bP",
+] as const;
 
 /** Props react-chessboard hands each piece renderer. */
 type PieceRenderProps = {
@@ -256,17 +262,24 @@ export function BoardPanel({
     }
   };
 
-  // Re-colour the board's own pieces. Each default piece takes a `fill` for its
-  // body paths, so tinting is all a style needs — the geometry, the outlines and
-  // the contrast details are the board's and stay untouched.
+  // Swap in a downloaded set. `undefined` leaves the board drawing its own.
   const pieces = useMemo(() => {
-    const set = PIECE_SETS[pieceSet];
-    if (pieceSet === DEFAULT_PIECE_SET) return undefined; // board's own colours
+    const dir = PIECE_SETS[pieceSet].dir;
+    if (!dir) return undefined;
     const out: Record<string, (props?: PieceRenderProps) => ReactElement> = {};
-    for (const key of Object.keys(defaultPieces)) {
-      const render = defaultPieces[key];
-      const fill = key[0] === "w" ? set.white : set.black;
-      out[key] = (props?: PieceRenderProps) => render({ ...props, fill });
+    for (const key of PIECE_KEYS) {
+      out[key] = (props?: PieceRenderProps) => (
+        // next/image does not optimise SVG and would wrap each piece in its own
+        // sized container, which the board already owns — a plain img is right.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={`/pieces/${dir}/${key}.svg`}
+          alt=""
+          // The board owns dragging; native image drag would fight it.
+          draggable={false}
+          style={{ width: "100%", height: "100%", ...props?.svgStyle }}
+        />
+      );
     }
     return out;
   }, [pieceSet]);
@@ -738,7 +751,6 @@ export function BoardPanel({
           {PIECE_SET_ORDER.map((name) => {
             const set = PIECE_SETS[name];
             const active = pieceSet === name;
-            // Preview each style with the piece itself, in that style's colours.
             const Knight = defaultPieces.wN;
             return (
               <button
@@ -748,14 +760,25 @@ export function BoardPanel({
                 title={`${set.label} pieces`}
                 aria-label={`${set.label} pieces`}
                 aria-pressed={active}
-                className={`flex h-6 w-6 items-center justify-center rounded-md border bg-slate-900 transition ${
+                className={`flex h-6 w-6 items-center justify-center rounded-md border bg-slate-700 transition ${
                   active
                     ? "border-emerald-400 ring-2 ring-emerald-400/70"
                     : "border-slate-600 hover:border-slate-400"
                 }`}
               >
+                {/* Preview each style with its own knight. */}
                 <span className="block h-[18px] w-[18px]">
-                  <Knight fill={set.white} />
+                  {set.dir ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={`/pieces/${set.dir}/wN.svg`}
+                      alt=""
+                      draggable={false}
+                      style={{ width: "100%", height: "100%" }}
+                    />
+                  ) : (
+                    <Knight />
+                  )}
                 </span>
               </button>
             );
