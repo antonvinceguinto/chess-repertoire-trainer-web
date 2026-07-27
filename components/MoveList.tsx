@@ -53,7 +53,7 @@ export function MoveList({
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-2">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+        <span className="text-[12px] lg:text-[13px] font-semibold uppercase tracking-wide text-slate-500">
           Current line
         </span>
         <div className="flex items-center gap-1.5">
@@ -68,7 +68,7 @@ export function MoveList({
                   ? "Grade every move (chess.com-style reactions)"
                   : "Turn Stockfish on to grade moves"
               }
-              className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-[11px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+              className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-[12px] lg:text-[13px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
                 showReactions
                   ? "border-sky-500/50 bg-sky-500/15 text-sky-300"
                   : "border-slate-700 bg-slate-800/60 text-slate-400 hover:text-slate-200"
@@ -92,7 +92,7 @@ export function MoveList({
               variant={currentSaved ? "ghost" : "primary"}
               onClick={addCurrentLine}
               disabled={ply === 0 || currentSaved}
-              className="!py-1 text-xs"
+              className="!py-1 text-[13px] lg:text-sm"
               title="Save this line into the active repertoire"
             >
               {currentSaved ? "✓ In repertoire" : "＋ Save line"}
@@ -101,11 +101,11 @@ export function MoveList({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1 text-sm scroll-thin">
+      <div className="flex flex-wrap items-center gap-1 text-sm lg:text-[15px] scroll-thin">
         <button
           type="button"
           onClick={() => goToPly(0)}
-          className={`rounded px-1.5 py-0.5 text-xs font-medium ${
+          className={`rounded px-1.5 py-0.5 text-[13px] lg:text-sm font-medium ${
             ply === 0
               ? "bg-emerald-600 text-white"
               : "text-slate-400 hover:bg-slate-800"
@@ -122,14 +122,14 @@ export function MoveList({
           return (
             <span key={i} className="inline-flex items-center">
               {isWhite && (
-                <span className="mr-0.5 select-none text-xs tabular-nums text-slate-500">
+                <span className="mr-0.5 select-none text-[13px] lg:text-sm tabular-nums text-slate-500">
                   {moveNo}.
                 </span>
               )}
               <button
                 type="button"
                 onClick={() => goToPly(i + 1)}
-                className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[13px] transition ${
+                className={`inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[14px] lg:text-[15px] transition ${
                   active
                     ? "bg-emerald-600 text-white"
                     : saved
@@ -145,7 +145,7 @@ export function MoveList({
           );
         })}
         {line.length === 0 && (
-          <span className="px-1 py-0.5 text-xs text-slate-500">
+          <span className="px-1 py-0.5 text-[13px] lg:text-sm text-slate-500">
             Make a move on the board to begin exploring.
           </span>
         )}
@@ -161,7 +161,7 @@ export function MoveList({
 
       {showReactions && line.length > 0 && (
         <details className="mt-2 border-t border-slate-800/70 pt-2">
-          <summary className="cursor-pointer select-none text-[11px] font-medium text-slate-500 hover:text-slate-300">
+          <summary className="cursor-pointer select-none text-[12px] lg:text-[13px] font-medium text-slate-500 hover:text-slate-300">
             Move key
           </summary>
           <div className="mt-2">

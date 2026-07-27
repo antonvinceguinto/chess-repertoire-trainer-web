@@ -73,13 +73,13 @@ export function EnginePanel({
         title="Stockfish analysis"
         right={
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1 text-[11px] text-slate-400">
+            <label className="flex items-center gap-1 text-[12px] lg:text-[13px] text-slate-400">
               Lines
               <select
                 value={multipv}
                 onChange={(e) => setMultipv(Number(e.target.value))}
                 disabled={!engineOn}
-                className="rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-xs text-slate-200 disabled:opacity-40"
+                className="rounded border border-slate-700 bg-slate-800 px-1 py-0.5 text-[13px] lg:text-sm text-slate-200 disabled:opacity-40"
               >
                 {[1, 2, 3, 4, 5].map((n) => (
                   <option key={n} value={n}>
@@ -94,16 +94,16 @@ export function EnginePanel({
       />
       <div className="p-2">
         {!engineOn ? (
-          <p className="px-1 py-3 text-center text-xs leading-relaxed text-slate-500">
+          <p className="px-1 py-3 text-center text-[13px] lg:text-sm leading-relaxed text-slate-500">
             Engine is off — you&apos;re working from book moves only. Turn it on
             for Stockfish evaluations.
           </p>
         ) : status === "error" ? (
-          <p className="px-1 py-3 text-center text-xs text-rose-400">
+          <p className="px-1 py-3 text-center text-[13px] lg:text-sm text-rose-400">
             Stockfish failed to load in this browser.
           </p>
         ) : lines.length === 0 ? (
-          <p className="animate-soft-pulse px-1 py-3 text-center text-xs text-slate-500">
+          <p className="animate-soft-pulse px-1 py-3 text-center text-[13px] lg:text-sm text-slate-500">
             {status === "loading" ? "Loading engine…" : "Analyzing…"}
           </p>
         ) : (
@@ -184,7 +184,7 @@ function EngineRow({
       } ${selected ? "bg-sky-500/10 ring-1 ring-sky-500/40" : "hover:bg-slate-800/60"}`}
     >
       <span
-        className={`w-14 shrink-0 rounded border text-center text-xs font-bold tabular-nums ${scoreColor}`}
+        className={`w-14 shrink-0 rounded border text-center text-[13px] lg:text-sm font-bold tabular-nums ${scoreColor}`}
       >
         {formatScore(line)}
       </span>
@@ -192,7 +192,7 @@ function EngineRow({
       <button
         type="button"
         onClick={onPlay}
-        className="min-w-0 flex-1 truncate text-left font-mono text-[13px] text-slate-200 hover:text-white"
+        className="min-w-0 flex-1 truncate text-left font-mono text-[14px] lg:text-[15px] text-slate-200 hover:text-white"
         title={preview}
       >
         {preview || line.san}
@@ -203,7 +203,7 @@ function EngineRow({
         aria-pressed={selected}
         aria-label="Explain this move"
         title="Why this move?"
-        className={`shrink-0 rounded border px-1.5 text-sm leading-6 transition ${
+        className={`shrink-0 rounded border px-1.5 text-sm lg:text-[15px] leading-6 transition ${
           selected
             ? "border-sky-500/60 bg-sky-500/15 text-sky-300"
             : "border-slate-600 text-slate-400 hover:border-sky-500 hover:text-sky-300"
@@ -214,7 +214,7 @@ function EngineRow({
       {canAdd &&
         (saved ? (
           <span
-            className="shrink-0 text-xs text-emerald-400"
+            className="shrink-0 text-[13px] lg:text-sm text-emerald-400"
             title="Already in repertoire"
           >
             ✓
@@ -223,7 +223,7 @@ function EngineRow({
           <button
             type="button"
             onClick={onAdd}
-            className="shrink-0 rounded border border-slate-600 px-1.5 text-sm leading-6 text-slate-300 opacity-100 transition hover:border-emerald-500 hover:text-emerald-300 hoverable:opacity-0 hoverable:group-hover:opacity-100"
+            className="shrink-0 rounded border border-slate-600 px-1.5 text-sm lg:text-[15px] leading-6 text-slate-300 opacity-100 transition hover:border-emerald-500 hover:text-emerald-300 hoverable:opacity-0 hoverable:group-hover:opacity-100"
             title="Add this move to repertoire"
           >
             ＋
@@ -268,7 +268,7 @@ function Section({
 }) {
   return (
     <div className={className}>
-      <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+      <div className="mb-1 text-[11px] lg:text-[12px] font-semibold uppercase tracking-wider text-slate-500">
         {title}
       </div>
       {children}
@@ -296,12 +296,12 @@ function MoveSummaryCard({
       <div className="border-b border-slate-800/80 bg-slate-900/50 p-3">
         {summary.opening && (
           <div className="mb-2.5 flex items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-1.5 text-[13px] font-semibold text-slate-100">
+            <span className="flex min-w-0 items-center gap-1.5 text-[14px] lg:text-[15px] font-semibold text-slate-100">
               <span aria-hidden>📖</span>
               <span className="truncate">{summary.opening.name}</span>
             </span>
             {summary.opening.eco && (
-              <span className="shrink-0 rounded-md border border-emerald-700/50 bg-emerald-950/40 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-emerald-300">
+              <span className="shrink-0 rounded-md border border-emerald-700/50 bg-emerald-950/40 px-1.5 py-0.5 font-mono text-[11px] lg:text-[12px] font-semibold text-emerald-300">
                 {summary.opening.eco}
               </span>
             )}
@@ -312,11 +312,11 @@ function MoveSummaryCard({
             {summary.san}
           </span>
           <div className="min-w-0">
-            <div className="truncate text-[13px] font-medium text-slate-200">
+            <div className="truncate text-[14px] lg:text-[15px] font-medium text-slate-200">
               {tagline}
             </div>
             {summary.descriptor && (
-              <div className="truncate text-xs text-slate-500">{summary.descriptor}</div>
+              <div className="truncate text-[13px] lg:text-sm text-slate-500">{summary.descriptor}</div>
             )}
           </div>
         </div>
@@ -326,7 +326,7 @@ function MoveSummaryCard({
       {summary.idea && (
         <div className="border-b border-slate-800/60 p-3">
           <Section title="The idea">
-            <p className="text-[13px] leading-relaxed text-slate-300">
+            <p className="text-[14px] lg:text-[15px] leading-relaxed text-slate-300">
               <Emphasis text={summary.idea} />
             </p>
           </Section>
@@ -344,7 +344,7 @@ function MoveSummaryCard({
             <Section title="What it does">
               <ul className="space-y-1">
                 {summary.actions.map((a, i) => (
-                  <li key={i} className="flex gap-1.5 text-[12px] leading-snug text-slate-300">
+                  <li key={i} className="flex gap-1.5 text-[13px] lg:text-[14px] leading-snug text-slate-300">
                     <span className="text-emerald-500/80" aria-hidden>
                       ›
                     </span>
@@ -359,7 +359,7 @@ function MoveSummaryCard({
             <Section title={`If ${summary.opponent} plays…`}>
               <ul className="space-y-1">
                 {summary.replies.map((r) => (
-                  <li key={r.san} className="text-[12px] leading-snug">
+                  <li key={r.san} className="text-[13px] lg:text-[14px] leading-snug">
                     <span className="font-mono font-semibold text-slate-200">…{r.san}</span>{" "}
                     {r.name && <span className="text-slate-400">{r.name} </span>}
                     <span className="text-slate-500">· {r.note}</span>
@@ -374,12 +374,12 @@ function MoveSummaryCard({
       {/* WATCH OUT */}
       {summary.watchOut.length > 0 && (
         <div className="bg-amber-950/25 p-3">
-          <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-amber-400/90">
+          <div className="mb-1 flex items-center gap-1.5 text-[11px] lg:text-[12px] font-semibold uppercase tracking-wider text-amber-400/90">
             <span aria-hidden>⚠</span> Watch out
           </div>
           <ul className="space-y-1">
             {summary.watchOut.map((w, i) => (
-              <li key={i} className="flex gap-1.5 text-[12px] leading-snug text-amber-200/80">
+              <li key={i} className="flex gap-1.5 text-[13px] lg:text-[14px] leading-snug text-amber-200/80">
                 <span aria-hidden>·</span>
                 <span className="min-w-0">
                   <Emphasis text={w} />
@@ -397,14 +397,14 @@ function MoveSummaryCard({
 function QualityTag({ isBest, lossVsBest }: { isBest: boolean; lossVsBest: number }) {
   if (isBest) {
     return (
-      <span className="w-14 shrink-0 rounded border border-emerald-600/40 bg-emerald-600/15 text-center text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+      <span className="w-14 shrink-0 rounded border border-emerald-600/40 bg-emerald-600/15 text-center text-[11px] lg:text-[12px] font-semibold uppercase tracking-wide text-emerald-300">
         Best
       </span>
     );
   }
   if (lossVsBest < 20) {
     return (
-      <span className="w-14 shrink-0 text-center text-[10px] font-medium text-slate-400">
+      <span className="w-14 shrink-0 text-center text-[11px] lg:text-[12px] font-medium text-slate-400">
         ≈ equal
       </span>
     );
@@ -419,7 +419,7 @@ function QualityTag({ isBest, lossVsBest }: { isBest: boolean; lossVsBest: numbe
     lossVsBest >= 1000 ? "≪ best" : `−${(lossVsBest / 100).toFixed(lossVsBest < 100 ? 2 : 1)}`;
   return (
     <span
-      className={`w-14 shrink-0 text-center text-[10px] font-semibold tabular-nums ${style}`}
+      className={`w-14 shrink-0 text-center text-[11px] lg:text-[12px] font-semibold tabular-nums ${style}`}
       title="How much worse than the best move"
     >
       {label}

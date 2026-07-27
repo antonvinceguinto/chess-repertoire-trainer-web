@@ -134,7 +134,7 @@ export function CoveragePanel({
       <PanelHeader
         title="Coverage"
         right={
-          <div className="flex rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[11px]">
+          <div className="flex rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[12px] lg:text-[13px]">
             {(
               [
                 ["openings", "By opening"],
@@ -177,8 +177,8 @@ function LevelSelector({
   return (
     <div className="border-b border-slate-800 px-3 py-2">
       <div className="flex items-center gap-2">
-        <span className="shrink-0 text-[11px] text-slate-500">Prepare for</span>
-        <div className="flex flex-1 rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[11px]">
+        <span className="shrink-0 text-[12px] lg:text-[13px] text-slate-500">Prepare for</span>
+        <div className="flex flex-1 rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[12px] lg:text-[13px]">
           {THOROUGHNESS_LEVELS.map((l) => (
             <button
               key={l.id}
@@ -197,7 +197,7 @@ function LevelSelector({
         </div>
       </div>
       {active && (
-        <p className="mt-1 text-[10px] text-slate-600">{active.blurb}.</p>
+        <p className="mt-1 text-[11px] lg:text-[12px] text-slate-600">{active.blurb}.</p>
       )}
     </div>
   );
@@ -228,10 +228,10 @@ function OpeningsView({
     <>
       <div className="mb-2 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2.5">
         <div className="flex items-baseline justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+          <span className="text-[13px] lg:text-sm font-semibold uppercase tracking-wide text-slate-400">
             Overall prepared
           </span>
-          <span className="text-sm font-bold tabular-nums text-slate-100">
+          <span className="text-sm lg:text-[15px] font-bold tabular-nums text-slate-100">
             {pct}%
           </span>
         </div>
@@ -241,7 +241,7 @@ function OpeningsView({
             style={{ width: `${Math.max(2, pct)}%` }}
           />
         </div>
-        <p className="mt-1.5 text-[11px] text-slate-500">
+        <p className="mt-1.5 text-[12px] lg:text-[13px] text-slate-500">
           {overall.covered} of {overall.total} replies answered ·{" "}
           {fullyPrepared} of {progress.length}{" "}
           {progress.length === 1 ? "opening" : "openings"} fully covered.
@@ -250,7 +250,7 @@ function OpeningsView({
           <Button
             variant="primary"
             onClick={() => onStartFix(gaps.map(gapPath))}
-            className="mt-2 w-full !py-1.5 text-xs"
+            className="mt-2 w-full !py-1.5 text-[13px] lg:text-sm"
           >
             ⚡ Fix {gaps.length} {gaps.length === 1 ? "gap" : "gaps"} — guided
           </Button>
@@ -306,25 +306,25 @@ function OpeningRow({
         <div className="flex items-center gap-2">
           {hasDetail && (
             <span
-              className={`shrink-0 text-[10px] text-slate-500 transition ${open ? "rotate-90" : ""}`}
+              className={`shrink-0 text-[11px] lg:text-[12px] text-slate-500 transition ${open ? "rotate-90" : ""}`}
             >
               ▶
             </span>
           )}
           {p.eco && (
-            <span className="shrink-0 font-mono text-[10px] text-slate-500">
+            <span className="shrink-0 font-mono text-[11px] lg:text-[12px] text-slate-500">
               {p.eco}
             </span>
           )}
-          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-100">
+          <span className="min-w-0 flex-1 truncate text-[14px] lg:text-[15px] font-semibold text-slate-100">
             {p.family}
           </span>
           {done ? (
-            <span className="shrink-0 text-[10px] font-semibold text-emerald-300">
+            <span className="shrink-0 text-[11px] lg:text-[12px] font-semibold text-emerald-300">
               ✓ Prepared
             </span>
           ) : (
-            <span className="shrink-0 text-[10px] font-medium text-amber-300">
+            <span className="shrink-0 text-[11px] lg:text-[12px] font-medium text-amber-300">
               {p.open} to close
             </span>
           )}
@@ -337,7 +337,7 @@ function OpeningRow({
               style={{ width: `${Math.max(3, pct)}%` }}
             />
           </div>
-          <span className="w-16 shrink-0 text-right text-[11px] tabular-nums text-slate-300">
+          <span className="w-16 shrink-0 text-right text-[12px] lg:text-[13px] tabular-nums text-slate-300">
             {p.covered}/{p.total} · {pct}%
           </span>
         </div>
@@ -350,7 +350,7 @@ function OpeningRow({
               <Button
                 variant="secondary"
                 onClick={() => onStartFix(p.gaps.map(gapPath))}
-                className="mb-1.5 w-full !py-1 text-[11px]"
+                className="mb-1.5 w-full !py-1 text-[12px] lg:text-[13px]"
               >
                 ⚡ Fix {p.family} — {p.gaps.length}{" "}
                 {p.gaps.length === 1 ? "gap" : "gaps"}
@@ -371,7 +371,7 @@ function OpeningRow({
           {p.answered.length > 0 && (
             <>
               <p
-                className={`px-0.5 pb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 ${
+                className={`px-0.5 pb-1 text-[11px] lg:text-[12px] font-semibold uppercase tracking-wide text-slate-500 ${
                   p.gaps.length > 0 ? "mt-2.5" : ""
                 }`}
               >
@@ -403,7 +403,7 @@ function AnsweredView({
 }) {
   return (
     <>
-      <p className="px-1 pb-2 text-[11px] leading-relaxed text-slate-500">
+      <p className="px-1 pb-2 text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
         <span className="text-slate-300">{answered.length}</span> answered{" "}
         {answered.length === 1 ? "line" : "lines"} — tap one to replay it move by
         move and review or add another response.
@@ -459,7 +459,7 @@ function AllGapsView({
   return (
     <>
       <div className="flex items-center justify-between gap-2 px-1 pb-2">
-        <p className="text-[11px] leading-relaxed text-slate-500">
+        <p className="text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
           {defenses > 0 && (
             <>
               <span className="text-slate-300">{defenses}</span> unanswered{" "}
@@ -483,7 +483,7 @@ function AllGapsView({
               ? "Rank by how sharp each gap is, using Stockfish"
               : "Turn Stockfish on to rank gaps by danger"
           }
-          className={`shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
+          className={`shrink-0 rounded-md border px-2 py-0.5 text-[11px] lg:text-[12px] font-medium transition disabled:cursor-not-allowed disabled:opacity-40 ${
             dangerOn
               ? "border-rose-600/60 bg-rose-500/15 text-rose-300"
               : "border-slate-700 text-slate-400 hover:text-slate-200"
@@ -494,12 +494,12 @@ function AllGapsView({
       </div>
       {dangerOn &&
         (dangerFailed ? (
-          <p className="px-1 pb-2 text-[10px] text-rose-400">
+          <p className="px-1 pb-2 text-[11px] lg:text-[12px] text-rose-400">
             Couldn&apos;t score danger — the engine is unavailable.
           </p>
         ) : (
           dangerDone < dangerTotal && (
-            <p className="animate-soft-pulse px-1 pb-2 text-[10px] text-slate-500">
+            <p className="animate-soft-pulse px-1 pb-2 text-[11px] lg:text-[12px] text-slate-500">
               Scoring danger with Stockfish… {dangerDone}/{dangerTotal}
             </p>
           )
@@ -507,7 +507,7 @@ function AllGapsView({
       <Button
         variant="primary"
         onClick={() => onStartFix(ordered.map(gapPath))}
-        className="mb-2 w-full !py-1.5 text-xs"
+        className="mb-2 w-full !py-1.5 text-[13px] lg:text-sm"
       >
         ⚡ Fix all {gaps.length} — guided
         {engineAvailable ? ", with engine suggestions" : ""}

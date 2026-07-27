@@ -46,7 +46,7 @@ export function BookPanel({ evaluation, onHide }: Props) {
         title="Opening book"
         right={
           <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-[11px] text-slate-400">
+            <label className="flex items-center gap-1.5 text-[12px] lg:text-[13px] text-slate-400">
               Live win-rates
               <Toggle checked={liveOn} onChange={setLiveOn} />
             </label>
@@ -54,7 +54,7 @@ export function BookPanel({ evaluation, onHide }: Props) {
               <button
                 type="button"
                 onClick={onHide}
-                className="rounded border border-slate-700 px-1.5 py-0.5 text-[10px] font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
+                className="rounded border border-slate-700 px-1.5 py-0.5 text-[11px] lg:text-[12px] font-medium text-slate-400 transition hover:border-slate-500 hover:text-slate-200"
                 title="Hide the opening book to widen the board"
               >
                 Hide
@@ -64,7 +64,7 @@ export function BookPanel({ evaluation, onHide }: Props) {
         }
       />
       <div className="p-2">
-        <div className="mb-2 flex min-h-[18px] items-center justify-between px-1 text-xs">
+        <div className="mb-2 flex min-h-[18px] items-center justify-between px-1 text-[13px] lg:text-sm">
           {opening ? (
             <span className="truncate">
               <span className="font-mono text-slate-500">{opening.eco}</span>{" "}
@@ -82,7 +82,7 @@ export function BookPanel({ evaluation, onHide }: Props) {
                   key={d}
                   type="button"
                   onClick={() => setDb(d)}
-                  className={`rounded px-1.5 py-0.5 text-[10px] capitalize ${
+                  className={`rounded px-1.5 py-0.5 text-[11px] lg:text-[12px] capitalize ${
                     db === d ? "bg-emerald-600 text-white" : "text-slate-400"
                   }`}
                 >
@@ -94,21 +94,21 @@ export function BookPanel({ evaluation, onHide }: Props) {
         </div>
 
         {liveOn && live.error && (
-          <p className="mb-2 rounded bg-amber-950/40 px-2 py-1 text-[11px] text-amber-400">
+          <p className="mb-2 rounded bg-amber-950/40 px-2 py-1 text-[12px] lg:text-[13px] text-amber-400">
             Live stats unavailable (Lichess not reachable). Showing bundled book.
           </p>
         )}
 
         {error ? (
-          <p className="px-1 py-3 text-center text-xs text-rose-400">
+          <p className="px-1 py-3 text-center text-[13px] lg:text-sm text-rose-400">
             Could not load the opening book.
           </p>
         ) : !ready ? (
-          <p className="animate-soft-pulse px-1 py-3 text-center text-xs text-slate-500">
+          <p className="animate-soft-pulse px-1 py-3 text-center text-[13px] lg:text-sm text-slate-500">
             Loading opening book…
           </p>
         ) : moves.length === 0 ? (
-          <p className="px-1 py-3 text-center text-xs text-slate-500">
+          <p className="px-1 py-3 text-center text-[13px] lg:text-sm text-slate-500">
             Out of book — no established theory moves from this position. Use the
             engine to choose a continuation.
           </p>
@@ -171,7 +171,7 @@ function BookRow({
       <button
         type="button"
         onClick={onPlay}
-        className="w-12 shrink-0 text-left font-mono text-[13px] font-semibold text-slate-100 hover:text-white"
+        className="w-12 shrink-0 text-left font-mono text-[14px] lg:text-[15px] font-semibold text-slate-100 hover:text-white"
         title={move.name ? `${move.eco} ${move.name}` : "Play this move"}
       >
         {move.san}
@@ -194,13 +194,13 @@ function BookRow({
           </div>
         )}
         {move.name && (
-          <div className="mt-0.5 truncate text-[10px] text-slate-500">
+          <div className="mt-0.5 truncate text-[11px] lg:text-[12px] text-slate-500">
             {move.name}
           </div>
         )}
       </div>
 
-      <div className="flex w-12 shrink-0 flex-col items-end text-[10px] leading-tight">
+      <div className="flex w-12 shrink-0 flex-col items-end text-[11px] lg:text-[12px] leading-tight">
         <span className="tabular-nums text-slate-400">
           {liveMove ? formatCount(liveMove.total) : formatCount(move.count)}
         </span>
@@ -213,14 +213,14 @@ function BookRow({
 
       {canAdd &&
         (saved ? (
-          <span className="w-5 shrink-0 text-center text-xs text-emerald-400" title="In repertoire">
+          <span className="w-5 shrink-0 text-center text-[13px] lg:text-sm text-emerald-400" title="In repertoire">
             ✓
           </span>
         ) : (
           <button
             type="button"
             onClick={onAdd}
-            className="w-5 shrink-0 rounded border border-slate-600 text-sm leading-6 text-slate-300 opacity-100 transition hover:border-emerald-500 hover:text-emerald-300 hoverable:opacity-0 hoverable:group-hover:opacity-100"
+            className="w-5 shrink-0 rounded border border-slate-600 text-sm lg:text-[15px] leading-6 text-slate-300 opacity-100 transition hover:border-emerald-500 hover:text-emerald-300 hoverable:opacity-0 hoverable:group-hover:opacity-100"
             title="Add this move to repertoire"
           >
             ＋

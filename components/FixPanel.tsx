@@ -46,10 +46,10 @@ export function FixPanel({ evaluation, status, engineOn }: Props) {
         <PanelHeader title="Fix gaps" />
         <div className="p-6 text-center">
           <p className="text-3xl">✓</p>
-          <p className="mt-2 text-sm font-semibold text-emerald-300">
+          <p className="mt-2 text-sm lg:text-[15px] font-semibold text-emerald-300">
             Caught up!
           </p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-500">
+          <p className="mt-1 text-[13px] lg:text-sm leading-relaxed text-slate-500">
             You&apos;ve been through all {total}{" "}
             {total === 1 ? "gap" : "gaps"} in this batch. Your coverage has
             updated — reopen the Coverage tab to see how much closer to 100%
@@ -93,7 +93,7 @@ export function FixPanel({ evaluation, status, engineOn }: Props) {
       <PanelHeader
         title="Fix gaps"
         right={
-          <span className="text-[11px] tabular-nums text-slate-400">
+          <span className="text-[12px] lg:text-[13px] tabular-nums text-slate-400">
             Gap{" "}
             <span className="font-semibold text-slate-200">{fixIndex + 1}</span>{" "}
             of {total}
@@ -111,34 +111,34 @@ export function FixPanel({ evaluation, status, engineOn }: Props) {
 
         <div>
           {opening && (
-            <div className="text-[13px] font-semibold text-slate-100">
+            <div className="text-[14px] lg:text-[15px] font-semibold text-slate-100">
               {opening.eco && (
-                <span className="mr-1.5 font-mono text-[10px] text-slate-500">
+                <span className="mr-1.5 font-mono text-[11px] lg:text-[12px] text-slate-500">
                   {opening.eco}
                 </span>
               )}
               {opening.name}
             </div>
           )}
-          <div className="mt-0.5 font-mono text-[11px] leading-relaxed text-slate-400">
+          <div className="mt-0.5 font-mono text-[12px] lg:text-[13px] leading-relaxed text-slate-400">
             {seq || "start"}
           </div>
-          <p className="mt-1 text-[11px] text-slate-500">
+          <p className="mt-1 text-[12px] lg:text-[13px] text-slate-500">
             Your move — pick a reply to lock this line into your repertoire.
           </p>
           {reviewing && (
-            <p className="mt-1 text-[11px] font-medium text-amber-400/90">
+            <p className="mt-1 text-[12px] lg:text-[13px] font-medium text-amber-400/90">
               Reviewing an earlier move — press → to return to the gap.
             </p>
           )}
         </div>
 
         {!ready ? (
-          <p className="animate-soft-pulse py-4 text-center text-xs text-slate-500">
+          <p className="animate-soft-pulse py-4 text-center text-[13px] lg:text-sm text-slate-500">
             Loading suggestions…
           </p>
         ) : candidates.length === 0 ? (
-          <p className="py-3 text-center text-[11px] leading-relaxed text-slate-500">
+          <p className="py-3 text-center text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
             No book theory here.{" "}
             {engineOn && "The engine’s arrow on the board shows its pick. "}
             Play any move on the board to save it, or skip.
@@ -157,7 +157,7 @@ export function FixPanel({ evaluation, status, engineOn }: Props) {
                   >
                     {isBest ? (
                       <span
-                        className="shrink-0 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-emerald-300"
+                        className="shrink-0 rounded bg-emerald-600/15 px-1.5 py-0.5 text-[10px] lg:text-[11px] font-bold uppercase tracking-wide text-emerald-300"
                         title="Engine's top choice"
                       >
                         ★ Best
@@ -165,18 +165,18 @@ export function FixPanel({ evaluation, status, engineOn }: Props) {
                     ) : (
                       <span className="w-9 shrink-0" />
                     )}
-                    <span className="w-14 shrink-0 font-mono text-[15px] font-semibold text-slate-100">
+                    <span className="w-14 shrink-0 font-mono text-[15px] lg:text-[16px] font-semibold text-slate-100">
                       {c.san}
                     </span>
                     {el && (
-                      <span className="shrink-0 font-mono text-[11px] tabular-nums text-slate-400">
+                      <span className="shrink-0 font-mono text-[12px] lg:text-[13px] tabular-nums text-slate-400">
                         {formatScore(el)}
                       </span>
                     )}
-                    <span className="min-w-0 flex-1 truncate text-[11px] text-slate-500">
+                    <span className="min-w-0 flex-1 truncate text-[12px] lg:text-[13px] text-slate-500">
                       {c.count > 0 ? `${formatCount(c.count)} games` : c.name}
                     </span>
-                    <span className="shrink-0 rounded bg-emerald-600/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 transition group-hover:bg-emerald-600 group-hover:text-white">
+                    <span className="shrink-0 rounded bg-emerald-600/20 px-2 py-0.5 text-[12px] lg:text-[13px] font-semibold text-emerald-300 transition group-hover:bg-emerald-600 group-hover:text-white">
                       ＋ Add
                     </span>
                   </button>
@@ -187,7 +187,7 @@ export function FixPanel({ evaluation, status, engineOn }: Props) {
         )}
 
         {engineOn && status === "loading" && candidates.length > 0 && (
-          <p className="text-center text-[10px] text-slate-600">
+          <p className="text-center text-[11px] lg:text-[12px] text-slate-600">
             Engine still warming up — evals will fill in.
           </p>
         )}

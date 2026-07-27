@@ -67,7 +67,7 @@ export function GameBrowser({ onSelect, loadError }: Props) {
       <PanelHeader
         title="Analyse your games"
         right={
-          <span className="text-[10px] text-slate-500">via Chess.com</span>
+          <span className="text-[11px] lg:text-[12px] text-slate-500">via Chess.com</span>
         }
       />
 
@@ -80,7 +80,7 @@ export function GameBrowser({ onSelect, loadError }: Props) {
             autoComplete="username"
             spellCheck={false}
             aria-label="Chess.com username"
-            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-sm text-slate-100 placeholder:text-slate-600 focus:border-emerald-600 focus:outline-none"
+            className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950/60 px-2.5 py-1.5 text-sm lg:text-[15px] text-slate-100 placeholder:text-slate-600 focus:border-emerald-600 focus:outline-none"
           />
           <Button
             variant="primary"
@@ -90,7 +90,7 @@ export function GameBrowser({ onSelect, loadError }: Props) {
             {loading ? "Loading…" : "Find games"}
           </Button>
         </form>
-        <p className="text-[11px] leading-relaxed text-slate-500">
+        <p className="text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
           Public games only — you don&apos;t need to log in. Pick a game and
           Stockfish reviews every move, then the coach walks you through what
           went wrong.
@@ -99,7 +99,7 @@ export function GameBrowser({ onSelect, loadError }: Props) {
 
       <div className="max-h-[52vh] overflow-y-auto scroll-thin p-2">
         {loadError && (
-          <p className="mb-2 rounded-md border border-rose-900/60 bg-rose-950/40 px-2.5 py-2 text-[11px] text-rose-300">
+          <p className="mb-2 rounded-md border border-rose-900/60 bg-rose-950/40 px-2.5 py-2 text-[12px] lg:text-[13px] text-rose-300">
             {loadError}
           </p>
         )}
@@ -107,16 +107,16 @@ export function GameBrowser({ onSelect, loadError }: Props) {
         {error ? (
           <ErrorState kind={errorKind} message={error} />
         ) : loading && games.length === 0 ? (
-          <p className="animate-soft-pulse py-6 text-center text-xs text-slate-500">
+          <p className="animate-soft-pulse py-6 text-center text-[13px] lg:text-sm text-slate-500">
             Fetching games from Chess.com…
           </p>
         ) : games.length === 0 && query ? (
-          <p className="py-6 text-center text-xs leading-relaxed text-slate-500">
+          <p className="py-6 text-center text-[13px] lg:text-sm leading-relaxed text-slate-500">
             No standard-chess games found in {username}&apos;s last six months
             of archives.
           </p>
         ) : games.length === 0 ? (
-          <p className="py-6 text-center text-xs leading-relaxed text-slate-500">
+          <p className="py-6 text-center text-[13px] lg:text-sm leading-relaxed text-slate-500">
             Enter a Chess.com username above to pull in their recent games.
           </p>
         ) : (
@@ -132,7 +132,7 @@ export function GameBrowser({ onSelect, loadError }: Props) {
               ))}
             </ul>
             {loading && (
-              <p className="animate-soft-pulse py-2 text-center text-[10px] text-slate-500">
+              <p className="animate-soft-pulse py-2 text-center text-[11px] lg:text-[12px] text-slate-500">
                 Checking older archives… ({monthsChecked}{" "}
                 {monthsChecked === 1 ? "month" : "months"} so far)
               </p>
@@ -153,22 +153,22 @@ function ErrorState({
 }) {
   return (
     <div className="py-6 text-center">
-      <p className="text-xs font-semibold text-rose-300">{message}</p>
+      <p className="text-[13px] lg:text-sm font-semibold text-rose-300">{message}</p>
       {kind === "not_found" && (
-        <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+        <p className="mt-1.5 text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
           Check the spelling — it needs to be the Chess.com username, not the
           display name.
         </p>
       )}
       {kind === "proxy_unavailable" && (
-        <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+        <p className="mt-1.5 text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
           Chess.com blocks direct browser requests, so this feature needs the
           app&apos;s <code className="text-slate-400">/api/chesscom</code> route
           — it isn&apos;t reachable on this deployment.
         </p>
       )}
       {kind === "rate_limited" && (
-        <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+        <p className="mt-1.5 text-[12px] lg:text-[13px] leading-relaxed text-slate-500">
           Chess.com limits how often their archives can be read. Give it a
           minute.
         </p>
@@ -220,7 +220,7 @@ function GameRow({
         className="group flex w-full items-center gap-2 rounded-md border border-slate-800 bg-slate-900/40 px-2.5 py-2 text-left transition hover:border-emerald-600/60 hover:bg-slate-800/60"
       >
         <span
-          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-[10px] font-bold text-slate-950 ${style.dot}`}
+          className={`flex h-5 w-5 shrink-0 items-center justify-center rounded text-[11px] lg:text-[12px] font-bold text-slate-950 ${style.dot}`}
           title={`${outcome} by ${endReason(game).toLowerCase()}`}
         >
           {style.label}
@@ -236,15 +236,15 @@ function GameRow({
         />
 
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-medium text-slate-100">
+          <span className="block truncate text-[14px] lg:text-[15px] font-medium text-slate-100">
             {them.username}
             {them.rating != null && (
-              <span className="ml-1 text-[11px] font-normal text-slate-500">
+              <span className="ml-1 text-[12px] lg:text-[13px] font-normal text-slate-500">
                 {them.rating}
               </span>
             )}
           </span>
-          <span className="block truncate text-[10px] text-slate-500">
+          <span className="block truncate text-[11px] lg:text-[12px] text-slate-500">
             {TIME_CLASS_ICON[game.timeClass] ?? "•"}{" "}
             {formatTimeControl(game.timeControl) || game.timeClass}
             {date && ` · ${date}`} · {endReason(game)}
@@ -253,14 +253,14 @@ function GameRow({
 
         {accuracy != null && (
           <span
-            className="shrink-0 font-mono text-[11px] tabular-nums text-slate-400"
+            className="shrink-0 font-mono text-[12px] lg:text-[13px] tabular-nums text-slate-400"
             title="Chess.com's own accuracy for this game"
           >
             {accuracy.toFixed(1)}
           </span>
         )}
 
-        <span className="shrink-0 rounded bg-emerald-600/20 px-2 py-0.5 text-[11px] font-semibold text-emerald-300 transition group-hover:bg-emerald-600 group-hover:text-white">
+        <span className="shrink-0 rounded bg-emerald-600/20 px-2 py-0.5 text-[12px] lg:text-[13px] font-semibold text-emerald-300 transition group-hover:bg-emerald-600 group-hover:text-white">
           Review
         </span>
       </button>

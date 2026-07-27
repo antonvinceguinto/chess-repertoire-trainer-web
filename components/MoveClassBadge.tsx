@@ -22,7 +22,7 @@ export function MoveClassChip({
       : m.label;
   return (
     <span
-      className={`ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded border px-0.5 text-[10px] font-bold leading-none ${m.chip}`}
+      className={`ml-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded border px-0.5 text-[11px] lg:text-[12px] font-bold leading-none ${m.chip}`}
       title={title}
       aria-label={m.label}
     >
@@ -76,24 +76,24 @@ export function MoveReactionCard({
         >
           <MoveClassDisc cls={classification.cls} />
         </span>
-        <span className="font-mono text-sm font-semibold text-slate-100">
+        <span className="font-mono text-sm lg:text-[15px] font-semibold text-slate-100">
           <span className="text-slate-500">{num}</span> {san}
         </span>
         <span
-          className={`rounded border px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide ${m.chip}`}
+          className={`rounded border px-1 py-0.5 text-[11px] lg:text-[12px] font-bold uppercase tracking-wide ${m.chip}`}
         >
           {m.label}
         </span>
         {classification.winLoss >= 1 && (
           <span
-            className="ml-auto text-[11px] font-medium tabular-nums text-slate-500"
+            className="ml-auto text-[12px] lg:text-[13px] font-medium tabular-nums text-slate-500"
             title="Winning chance given up versus the best move"
           >
             −{classification.winLoss.toFixed(0)}%
           </span>
         )}
       </div>
-      <p className="mt-1.5 text-[12px] leading-snug text-slate-300">
+      <p className="mt-1.5 text-[13px] lg:text-[14px] leading-snug text-slate-300">
         {classification.reason}
       </p>
     </div>
@@ -107,7 +107,7 @@ export function MoveClassLegend() {
       {CLASS_ORDER.map((cls) => (
         <span key={cls} className="inline-flex items-center gap-1">
           <MoveClassChip cls={cls} />
-          <span className="text-[11px] text-slate-400">{CLASS_META[cls].label}</span>
+          <span className="text-[12px] lg:text-[13px] text-slate-400">{CLASS_META[cls].label}</span>
         </span>
       ))}
     </div>

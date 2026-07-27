@@ -38,7 +38,7 @@ export function RepertoireSelect() {
           value={activeId ?? ""}
           onChange={(e) => selectRepertoire(e.target.value)}
           disabled={repertoires.length === 0}
-          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm text-slate-100 disabled:opacity-50"
+          className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1.5 text-sm lg:text-[15px] text-slate-100 disabled:opacity-50"
         >
           {repertoires.length === 0 && <option value="">No repertoires yet</option>}
           {repertoires.map((r) => (
@@ -78,16 +78,16 @@ export function RepertoireSelect() {
             onChange={(e) => setName(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && submitCreate()}
             placeholder="Repertoire name (e.g. Sicilian Defense)"
-            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-600 focus:outline-none"
+            className="w-full rounded border border-slate-700 bg-slate-900 px-2 py-1.5 text-sm lg:text-[15px] text-slate-100 placeholder:text-slate-500 focus:border-emerald-600 focus:outline-none"
           />
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-400">I play as:</span>
+            <span className="text-[13px] lg:text-sm text-slate-400">I play as:</span>
             {(["white", "black"] as Color[]).map((c) => (
               <button
                 key={c}
                 type="button"
                 onClick={() => setColor(c)}
-                className={`rounded-md border px-3 py-1 text-xs font-medium capitalize transition ${
+                className={`rounded-md border px-3 py-1 text-[13px] lg:text-sm font-medium capitalize transition ${
                   color === c
                     ? "border-emerald-500 bg-emerald-600/20 text-emerald-200"
                     : "border-slate-700 text-slate-300 hover:bg-slate-700/50"
@@ -109,7 +109,7 @@ export function RepertoireSelect() {
       )}
 
       {activeRepertoire && !creating && (
-        <div className="mt-2 flex items-center gap-2 text-xs text-slate-400">
+        <div className="mt-2 flex items-center gap-2 text-[13px] lg:text-sm text-slate-400">
           {editing ? (
             <input
               autoFocus
@@ -125,12 +125,12 @@ export function RepertoireSelect() {
                 }
                 if (e.key === "Escape") setEditing(false);
               }}
-              className="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100 focus:border-emerald-600 focus:outline-none"
+              className="flex-1 rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm lg:text-[15px] text-slate-100 focus:border-emerald-600 focus:outline-none"
             />
           ) : (
             <>
               <span
-                className={`inline-flex h-4 w-4 items-center justify-center rounded-full border text-[9px] ${
+                className={`inline-flex h-4 w-4 items-center justify-center rounded-full border text-[10px] lg:text-[11px] ${
                   activeRepertoire.color === "white"
                     ? "border-slate-400 bg-slate-100 text-slate-900"
                     : "border-slate-600 bg-slate-950 text-slate-100"

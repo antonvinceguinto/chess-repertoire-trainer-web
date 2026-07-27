@@ -126,7 +126,7 @@ export function CoachCard({
         <div className="flex items-center gap-2">
           <Avatar mood="neutral" />
           <div className="min-w-0">
-            <p className="text-[13px] font-semibold text-slate-200">
+            <p className="text-[14px] lg:text-[15px] font-semibold text-slate-200">
               {inVariation
                 ? branchSource === "engine"
                   ? "This is the line the engine wanted."
@@ -135,10 +135,10 @@ export function CoachCard({
                   ? "Starting position"
                   : "This move isn't judged yet."}
             </p>
-            <p className="text-[10px] text-slate-500">{COACH}</p>
+            <p className="text-[11px] lg:text-[12px] text-slate-500">{COACH}</p>
           </div>
         </div>
-        <p className="mt-1.5 text-[11px] leading-relaxed text-slate-400">
+        <p className="mt-1.5 text-[12px] lg:text-[13px] leading-relaxed text-slate-400">
           {inVariation
             ? "Keep playing and Stockfish scores every move as you go — watch the eval bar and the green arrow. Your game is untouched underneath."
             : atStart
@@ -176,25 +176,25 @@ export function CoachCard({
         <Avatar mood={advice.mood} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-[11px] font-semibold text-slate-200">{COACH}</span>
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[12px] lg:text-[13px] font-semibold text-slate-200">{COACH}</span>
+            <span className="text-[11px] lg:text-[12px] text-slate-500">
               on {isUser ? "your" : "their"} move
             </span>
           </div>
           <div className="flex items-center gap-1.5">
             <span
-              className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${meta.bg} ${meta.text}`}
+              className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] lg:text-[11px] font-bold uppercase tracking-wide ${meta.bg} ${meta.text}`}
             >
               {meta.glyph} {meta.label}
             </span>
-            <span className="font-mono text-[13px] font-semibold text-slate-100">
+            <span className="font-mono text-[14px] lg:text-[15px] font-semibold text-slate-100">
               {label(move)}
             </span>
           </div>
         </div>
       </div>
 
-      <p className="mt-2 text-[13px] font-semibold leading-snug text-slate-100">
+      <p className="mt-2 text-[14px] lg:text-[15px] font-semibold leading-snug text-slate-100">
         {pending ? "Still analysing this one…" : advice.headline}
       </p>
 
@@ -203,7 +203,7 @@ export function CoachCard({
           {advice.points.map((point, i) => (
             <li
               key={i}
-              className="flex gap-1.5 text-[12px] leading-relaxed text-slate-400"
+              className="flex gap-1.5 text-[13px] lg:text-[14px] leading-relaxed text-slate-400"
             >
               <span className="shrink-0 text-slate-600">•</span>
               <span>
@@ -223,20 +223,20 @@ export function CoachCard({
           }`}
         >
           <p
-            className={`text-[10px] font-semibold uppercase tracking-wide ${
+            className={`text-[11px] lg:text-[12px] font-semibold uppercase tracking-wide ${
               advice.box.tone === "good" ? "text-emerald-400" : "text-slate-500"
             }`}
           >
             {advice.box.label}
           </p>
-          <p className="mt-0.5 text-[12px] leading-relaxed text-slate-300">
+          <p className="mt-0.5 text-[13px] lg:text-[14px] leading-relaxed text-slate-300">
             <Sentence point={advice.box.segments} origin={move.index} />
           </p>
         </div>
       )}
 
       {!pending && advice.takeaway && (
-        <p className="mt-2 border-t border-slate-800 pt-2 text-[11px] italic leading-relaxed text-slate-500">
+        <p className="mt-2 border-t border-slate-800 pt-2 text-[12px] lg:text-[13px] italic leading-relaxed text-slate-500">
           💡 {advice.takeaway}
         </p>
       )}
@@ -246,7 +246,7 @@ export function CoachCard({
           <Button
             variant="primary"
             onClick={() => startChallenge(move.index, move.bestSan as string)}
-            className="flex-1 !py-1.5 text-xs"
+            className="flex-1 !py-1.5 text-[13px] lg:text-sm"
             title="Go back to that position and find the move yourself"
           >
             🎯 Let me try
@@ -260,7 +260,7 @@ export function CoachCard({
               })
             }
             disabled={move.bestPv.length === 0}
-            className="flex-1 !py-1.5 text-xs"
+            className="flex-1 !py-1.5 text-[13px] lg:text-sm"
             title="Play the engine's line out on the board"
           >
             ▶ Show the line
@@ -275,11 +275,11 @@ export function CoachCard({
 function Avatar({ mood }: { mood: CoachMood }) {
   return (
     <span
-      className={`relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-[16px] text-white shadow-md ring-1 ring-slate-950/60 ${MOOD[mood].avatar}`}
+      className={`relative inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br text-[16px] lg:text-[17px] text-white shadow-md ring-1 ring-slate-950/60 ${MOOD[mood].avatar}`}
       aria-hidden
     >
       ♞
-      <span className="absolute -bottom-0.5 -right-1 text-[12px] leading-none drop-shadow">
+      <span className="absolute -bottom-0.5 -right-1 text-[13px] lg:text-[14px] leading-none drop-shadow">
         {MOOD[mood].face}
       </span>
     </span>
@@ -336,7 +336,7 @@ function ExploringStrip({
 }) {
   return (
     <div className="mb-2 flex items-center gap-2 rounded-md border border-sky-800/70 bg-sky-950/40 px-2 py-1.5">
-      <span className="min-w-0 flex-1 truncate text-[11px] text-sky-200">
+      <span className="min-w-0 flex-1 truncate text-[12px] lg:text-[13px] text-sky-200">
         Exploring{" "}
         {name ? <span className="font-mono font-semibold">{name}</span> : "a side line"}{" "}
         — your game is untouched.
@@ -344,7 +344,7 @@ function ExploringStrip({
       <button
         type="button"
         onClick={onBack}
-        className="shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-sky-300 transition hover:bg-sky-900/60 hover:text-sky-100"
+        className="shrink-0 rounded px-1.5 py-0.5 text-[12px] lg:text-[13px] font-medium text-sky-300 transition hover:bg-sky-900/60 hover:text-sky-100"
       >
         ← Back to the game
       </button>
@@ -382,7 +382,7 @@ function ChallengeCard({
   onDismiss: () => void;
 }) {
   const dismiss = (
-    <Button variant="ghost" onClick={onDismiss} className="!py-1.5 text-xs">
+    <Button variant="ghost" onClick={onDismiss} className="!py-1.5 text-[13px] lg:text-sm">
       ✕ Done
     </Button>
   );
@@ -392,13 +392,13 @@ function ChallengeCard({
       <div className="flex items-center gap-2">
         <Avatar mood={status === "correct" ? "celebrate" : "neutral"} />
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-400">
+          <p className="text-[11px] lg:text-[12px] font-semibold uppercase tracking-wide text-emerald-400">
             Your turn
           </p>
-          <p className="text-[10px] text-slate-500">{COACH}</p>
+          <p className="text-[11px] lg:text-[12px] text-slate-500">{COACH}</p>
         </div>
       </div>
-      <p className="mt-1.5 text-[13px] font-semibold leading-snug text-slate-100">
+      <p className="mt-1.5 text-[14px] lg:text-[15px] font-semibold leading-snug text-slate-100">
         {playedSan
           ? `You played ${playedSan} here.`
           : "This is the position."}{" "}
@@ -407,10 +407,10 @@ function ChallengeCard({
 
       {status === "correct" ? (
         <>
-          <p className="mt-2 rounded-md bg-emerald-600/20 px-2.5 py-2 text-[12px] font-semibold text-emerald-200">
+          <p className="mt-2 rounded-md bg-emerald-600/20 px-2.5 py-2 text-[13px] lg:text-[14px] font-semibold text-emerald-200">
             ✓ That&apos;s it — {bestSan} is the move.
           </p>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+          <p className="mt-1 text-[12px] lg:text-[13px] leading-relaxed text-slate-400">
             It&apos;s on the board — play on from here to see how it goes, or
             watch the engine&apos;s line.
           </p>
@@ -419,7 +419,7 @@ function ChallengeCard({
               variant="primary"
               onClick={onGiveUp}
               disabled={!canShowLine}
-              className="flex-1 !py-1.5 text-xs"
+              className="flex-1 !py-1.5 text-[13px] lg:text-sm"
             >
               ▶ See the follow-up
             </Button>
@@ -428,7 +428,7 @@ function ChallengeCard({
         </>
       ) : status === "wrong" ? (
         <>
-          <p className="mt-2 rounded-md bg-rose-600/15 px-2.5 py-2 text-[12px] text-rose-200">
+          <p className="mt-2 rounded-md bg-rose-600/15 px-2.5 py-2 text-[13px] lg:text-[14px] text-rose-200">
             {lastWrong === playedSan
               ? `${lastWrong} is the move you actually played — there's a better one.`
               : `${lastWrong} isn't it.`}{" "}
@@ -440,14 +440,14 @@ function ChallengeCard({
             <Button
               variant="primary"
               onClick={onRetry}
-              className="flex-1 !py-1.5 text-xs"
+              className="flex-1 !py-1.5 text-[13px] lg:text-sm"
             >
               ↺ Try again
             </Button>
             <Button
               variant="secondary"
               onClick={onGiveUp}
-              className="!py-1.5 text-xs"
+              className="!py-1.5 text-[13px] lg:text-sm"
             >
               Show me
             </Button>
@@ -456,14 +456,14 @@ function ChallengeCard({
         </>
       ) : !atPuzzle ? (
         <>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+          <p className="mt-1 text-[12px] lg:text-[13px] leading-relaxed text-slate-400">
             You&apos;ve stepped away from the puzzle position.
           </p>
           <div className="mt-2 flex gap-1.5">
             <Button
               variant="primary"
               onClick={onRetry}
-              className="flex-1 !py-1.5 text-xs"
+              className="flex-1 !py-1.5 text-[13px] lg:text-sm"
             >
               ← Back to the puzzle
             </Button>
@@ -472,7 +472,7 @@ function ChallengeCard({
         </>
       ) : (
         <>
-          <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+          <p className="mt-1 text-[12px] lg:text-[13px] leading-relaxed text-slate-400">
             Play it on the board — right or wrong, your move lands, and your game
             is one click away.
           </p>
@@ -480,7 +480,7 @@ function ChallengeCard({
             <Button
               variant="secondary"
               onClick={onGiveUp}
-              className="flex-1 !py-1.5 text-xs"
+              className="flex-1 !py-1.5 text-[13px] lg:text-sm"
             >
               Show me
             </Button>

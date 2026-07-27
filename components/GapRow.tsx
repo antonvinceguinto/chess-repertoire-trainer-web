@@ -54,16 +54,16 @@ export function GapRow({
       >
         <div className="flex items-center gap-2">
           {rank === 1 && (
-            <span className="shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-rose-300">
+            <span className="shrink-0 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] lg:text-[11px] font-bold uppercase tracking-wide text-rose-300">
               Biggest
             </span>
           )}
           {gap.eco && (
-            <span className="shrink-0 font-mono text-[10px] text-slate-500">
+            <span className="shrink-0 font-mono text-[11px] lg:text-[12px] text-slate-500">
               {gap.eco}
             </span>
           )}
-          <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-slate-100">
+          <span className="min-w-0 flex-1 truncate text-[14px] lg:text-[15px] font-semibold text-slate-100">
             {gap.kind === "reply" && (
               <span className="text-slate-400">↪ your move · </span>
             )}
@@ -71,7 +71,7 @@ export function GapRow({
           </span>
           {danger && (
             <span
-              className={`inline-flex shrink-0 items-center gap-1 text-[10px] font-semibold ${DANGER_META[danger.level].text}`}
+              className={`inline-flex shrink-0 items-center gap-1 text-[11px] lg:text-[12px] font-semibold ${DANGER_META[danger.level].text}`}
               title="How much being unprepared here can hurt (engine-scored)"
             >
               <span
@@ -80,12 +80,12 @@ export function GapRow({
               {DANGER_META[danger.level].label}
             </span>
           )}
-          <span className={`shrink-0 text-[10px] font-medium ${tag.cls}`}>
+          <span className={`shrink-0 text-[11px] lg:text-[12px] font-medium ${tag.cls}`}>
             {tag.label}
           </span>
         </div>
 
-        <div className="mt-1 font-mono text-[11px] text-slate-500">
+        <div className="mt-1 font-mono text-[12px] lg:text-[13px] text-slate-500">
           {head}{" "}
           {gap.kind === "defense" ? (
             <span className="rounded bg-emerald-600/20 px-1 font-semibold text-emerald-300">
@@ -106,7 +106,7 @@ export function GapRow({
               style={{ width: `${barPct}%` }}
             />
           </div>
-          <span className="text-[10px] text-emerald-400 opacity-100 transition hoverable:opacity-0 hoverable:group-hover:opacity-100">
+          <span className="text-[11px] lg:text-[12px] text-emerald-400 opacity-100 transition hoverable:opacity-0 hoverable:group-hover:opacity-100">
             Fix →
           </span>
         </div>
@@ -138,23 +138,23 @@ export function AnsweredRow({
         className="group w-full rounded-md border border-slate-800 bg-slate-900/30 px-2.5 py-2 text-left transition hover:border-sky-600/50 hover:bg-slate-800/60"
       >
         <div className="flex items-center gap-2">
-          <span className="shrink-0 text-[10px] font-semibold text-emerald-300">
+          <span className="shrink-0 text-[11px] lg:text-[12px] font-semibold text-emerald-300">
             ✓
           </span>
           {line.eco && (
-            <span className="shrink-0 font-mono text-[10px] text-slate-500">
+            <span className="shrink-0 font-mono text-[11px] lg:text-[12px] text-slate-500">
               {line.eco}
             </span>
           )}
-          <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-slate-200">
+          <span className="min-w-0 flex-1 truncate text-[13px] lg:text-[14px] font-medium text-slate-200">
             {title}
           </span>
-          <span className="shrink-0 text-[10px] text-sky-400 opacity-100 transition hoverable:opacity-0 hoverable:group-hover:opacity-100">
+          <span className="shrink-0 text-[11px] lg:text-[12px] text-sky-400 opacity-100 transition hoverable:opacity-0 hoverable:group-hover:opacity-100">
             Replay →
           </span>
         </div>
 
-        <div className="mt-1 font-mono text-[11px] text-slate-500">
+        <div className="mt-1 font-mono text-[12px] lg:text-[13px] text-slate-500">
           {seq}{" "}
           <span className="text-slate-600">→ you play </span>
           <span className="font-semibold text-emerald-300">
@@ -183,7 +183,7 @@ export function Empty({
         : "text-slate-500";
   return (
     <p
-      className={`px-2 py-6 text-center text-xs leading-relaxed ${color} ${
+      className={`px-2 py-6 text-center text-[13px] lg:text-sm leading-relaxed ${color} ${
         pulse ? "animate-soft-pulse" : ""
       }`}
     >
