@@ -2,6 +2,14 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Subagents: hard cap of 4
+
+**Never spawn more than 4 subagents for a task — including inside a workflow, counted across the whole run, not per phase.** This is a hard ceiling, not a guideline, and it overrides "be exhaustive" instructions such as ultracode.
+
+The failure mode to avoid is fan-out proportional to results: a phase that spawns one agent per candidate/finding/file looks small when written and then explodes at runtime (one such run reached 26 agents from a single per-rule verification stage). If a stage would spawn one agent per item, batch the items into at most 4 agents instead, or do it inline.
+
+Prefer inline work. Reach for a subagent only when the task genuinely needs parallel independent exploration, and say up front how many you intend to spawn.
+
 @AGENTS.md
 
 The import above is load-bearing: this repo pins **Next.js 16.2.10 / React 19.2** and the App Router APIs, file conventions, and lint rules differ from older Next.js. Read the relevant guide in `node_modules/next/dist/docs/` before writing framework code. The ESLint config (`eslint-config-next`) enforces strict React-Compiler rules — notably `react-hooks/set-state-in-effect` and "no ref access during render" — which several existing files already trip; don't treat a non-empty `npm run lint` as your regression.
