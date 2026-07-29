@@ -15,15 +15,15 @@ import {
 /** Depth presets offered in the UI, cheapest first. */
 export const REVIEW_DEPTHS = [
   { id: "quick", label: "Quick", depth: 10, blurb: "Fastest — catches obvious blunders" },
-  { id: "standard", label: "Standard", depth: 14, blurb: "Balanced — the default" },
-  { id: "deep", label: "Deep", depth: 18, blurb: "Slow but thorough" },
+  { id: "standard", label: "Standard", depth: 25, blurb: "Balanced — the default" },
+  { id: "deep", label: "Deep", depth: 30, blurb: "Slowest — most thorough" },
 ] as const;
 
 export type ReviewDepthId = (typeof REVIEW_DEPTHS)[number]["id"];
 export const DEFAULT_REVIEW_DEPTH: ReviewDepthId = "standard";
 
 export function depthFor(id: ReviewDepthId): number {
-  return REVIEW_DEPTHS.find((d) => d.id === id)?.depth ?? 14;
+  return REVIEW_DEPTHS.find((d) => d.id === id)?.depth ?? 25;
 }
 
 /** Two lines let us tell "the only move" apart from "one of several fine moves". */
