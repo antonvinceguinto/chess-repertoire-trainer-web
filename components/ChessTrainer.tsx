@@ -6,7 +6,12 @@ import { useEngine } from "@/hooks/useEngine";
 import { useCoverage } from "@/hooks/useCoverage";
 import { useBookData } from "@/hooks/useBookData";
 import { useNow } from "@/hooks/useNow";
-import { REVIEW_DEPTH, useGameReview } from "@/hooks/useGameReview";
+import {
+  DEFAULT_REVIEW_DEPTH,
+  depthFor,
+  useGameReview,
+  type ReviewDepthId,
+} from "@/hooks/useGameReview";
 import { useMoveReview } from "@/hooks/useMoveReview";
 import type { ChessComGame } from "@/lib/chesscom";
 import { importantLines } from "@/lib/lines";
@@ -67,6 +72,8 @@ export function ChessTrainer() {
   const [reviewOn, setReviewOnState] = useState(true);
   const [multipv, setMultipv] = useState(3);
   const [tab, setTab] = useState<Tab>("analysis");
+  const [reviewDepth, setReviewDepth] =
+    useState<ReviewDepthId>(DEFAULT_REVIEW_DEPTH);
   const [gameLoadError, setGameLoadError] = useState<string | null>(null);
   const [thoroughness, setThoroughness] = useState<Thoroughness>(
     DEFAULT_THOROUGHNESS,
@@ -214,7 +221,7 @@ export function ChessTrainer() {
   const { review: gameReview, progress: reviewProgress } = useGameReview(
     reviewSession?.game ?? null,
     mode === "review",
-    REVIEW_DEPTH,
+    depthFor(reviewDepth),
     book,
   );
 
@@ -304,6 +311,8 @@ export function ChessTrainer() {
               <ReviewPanel
                 review={gameReview}
                 progress={reviewProgress}
+                depthId={reviewDepth}
+                onDepthChange={setReviewDepth}
               />
             ) : (
               <GameBrowser onSelect={openGame} loadError={gameLoadError} />
