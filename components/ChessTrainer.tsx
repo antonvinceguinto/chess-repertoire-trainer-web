@@ -31,8 +31,9 @@ import { ReviewPanel } from "./ReviewPanel";
 import { TrainPanel } from "./TrainPanel";
 import { RecallPanel } from "./RecallPanel";
 import { FixPanel } from "./FixPanel";
+import { LeaksPanel } from "./LeaksPanel";
 
-type Tab = "analysis" | "repertoire" | "gaps";
+type Tab = "analysis" | "repertoire" | "gaps" | "leaks";
 
 // Persisted preference: whether Stockfish runs at all. Off = a purely book-driven
 // workflow (no evals, no danger scoring, worker never loaded).
@@ -331,7 +332,7 @@ export function ChessTrainer() {
               />
 
               <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900/40 p-1 text-sm">
-                {(["analysis", "repertoire", "gaps"] as Tab[]).map((tb) => (
+                {(["analysis", "repertoire", "gaps", "leaks"] as Tab[]).map((tb) => (
                   <button
                     key={tb}
                     type="button"
@@ -364,6 +365,8 @@ export function ChessTrainer() {
               )}
 
               {tab === "repertoire" && <RepertoirePanel />}
+
+              {tab === "leaks" && <LeaksPanel book={book} />}
 
               {tab === "gaps" && (
                 <CoveragePanel
