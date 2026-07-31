@@ -40,6 +40,22 @@ import { colorOf } from "@/lib/chesscom";
 import type { ReviewChallenge, ReviewSession } from "@/lib/review";
 import { mergeRepertoires } from "@/lib/transfer";
 import { reshuffleLines, shuffle } from "@/lib/shuffle";
+import {
+  EMPTY_MEMORY,
+  buildQueue,
+  gradeCard,
+  loadMemory,
+  recordReview,
+  requeue,
+  resetRepertoireMemory,
+  saveMemory,
+  type CardStates,
+  type HintLevel,
+  type MemoryStore,
+  type RecallCard,
+  type RecallGrade,
+  type RecallSession,
+} from "@/lib/memory";
 
 /** Who built the side line currently on the board in review mode. */
 export type BranchSource = "engine" | "user";
@@ -128,6 +144,25 @@ interface TrainerContextValue {
   nextTrainingLine: () => void;
   prevTrainingLine: () => void;
 
+  // Recall (spaced repetition over positions)
+  recallSession: RecallSession | null;
+  /** The card on the board, or null outside recall / past the end of the queue. */
+  recallCard: RecallCard | null;
+  /** Scheduling state for the active repertoire's cards. */
+  cardStates: CardStates;
+  /** Reviews per local day, across all repertoires (drives the streak). */
+  reviewDays: Record<string, number>;
+  /** Whether memory survives a reload here (false when localStorage is blocked). */
+  memoryPersists: boolean;
+  startRecall: (cards: RecallCard[], options?: RecallOptions) => void;
+  stopRecall: () => void;
+  /** Give away one more rung of the answer (piece → square → move). */
+  nextHint: () => void;
+  /** Move to the next card once the current one is solved. */
+  nextCard: () => void;
+  /** Wipe the active repertoire's schedule and start over. */
+  resetMemory: () => void;
+
   // Guided gap fixing
   fixQueue: string[][] | null;
   fixIndex: number;
@@ -171,6 +206,14 @@ interface TrainerContextValue {
   restoreGame: (ply?: number) => void;
 }
 
+/** How to fill a recall sitting. */
+export interface RecallOptions {
+  /** Cards per sitting (default `RECALL_SESSION_SIZE`). */
+  limit?: number;
+  /** Drill the shakiest cards even when nothing is due yet. */
+  ignoreSchedule?: boolean;
+}
+
 const TrainerContext = createContext<TrainerContextValue | null>(null);
 
 export function useTrainer(): TrainerContextValue {
@@ -180,6 +223,8 @@ export function useTrainer(): TrainerContextValue {
 }
 
 const OPPONENT_DELAY_MS = 550;
+/** Cards per recall sitting — short enough to actually finish in one go. */
+export const RECALL_SESSION_SIZE = 20;
 /** Cadence for animated line playback (e.g. when previewing a gap line). */
 const LINE_ANIM_MS = 500;
 const LINE_ANIM_START_MS = 200;
@@ -208,6 +253,12 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   const [mode, setModeState] = useState<Mode>("build");
   const [session, setSession] = useState<TrainSession | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // Spaced-repetition drilling: the sitting in progress plus the persisted
+  // schedule it grades into.
+  const [recallSession, setRecallSession] = useState<RecallSession | null>(null);
+  const [memory, setMemory] = useState<MemoryStore>(EMPTY_MEMORY);
+  const [memoryLoaded, setMemoryLoaded] = useState(false);
+  const [memoryPersists, setMemoryPersists] = useState(true);
   // Guided gap-fixing: a queue of gap positions to walk through and answer.
   const [fixQueue, setFixQueue] = useState<string[][] | null>(null);
   const [fixIndex, setFixIndex] = useState(0);
@@ -258,6 +309,22 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (loaded) saveActiveId(activeId);
   }, [activeId, loaded]);
+
+  useEffect(() => {
+    setMemory(loadMemory());
+    setMemoryLoaded(true);
+  }, []);
+
+  /**
+   * Write the schedule through to localStorage as it changes. Unlike the
+   * repertoire saves above this is not an effect: whether the write stuck is
+   * worth telling the user about — a memory system that silently forgets
+   * everything on reload is worse than none.
+   */
+  const commitMemory = useCallback((next: MemoryStore) => {
+    setMemory(next);
+    setMemoryPersists(saveMemory(next));
+  }, []);
 
   /* ---------------- Helpers ---------------- */
 
@@ -367,6 +434,73 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     return () => clearTimeout(timer);
   }, [mode, session, turn, ply, fen]);
 
+  /* ---------------- Recall move handling ---------------- */
+
+  const cardStates: CardStates = useMemo(
+    () => (activeId ? memory.cards[activeId] ?? {} : {}),
+    [memory, activeId],
+  );
+
+  const recallCard = recallSession
+    ? recallSession.queue[recallSession.index] ?? null
+    : null;
+
+  /**
+   * Answering a card grades it and schedules it. The grade is derived from how
+   * the answer came out, never self-reported: clean recall earns the full
+   * interval, a hinted one earns a short one, and a wrong guess or a full
+   * reveal resets the card and brings it back later in this same sitting.
+   */
+  const handleRecallMove = useCallback(
+    (mv: LineMove): boolean => {
+      if (!recallSession || !recallCard) return false;
+      const userChar: Turn = recallSession.color === "white" ? "w" : "b";
+      if (mv.color !== userChar) return false;
+      if (recallSession.status === "solved") return false;
+
+      if (!recallCard.answers.includes(mv.san)) {
+        setRecallSession((s) =>
+          s
+            ? { ...s, status: "wrong", failed: true, lastWrong: mv.san }
+            : s,
+        );
+        return false;
+      }
+
+      const now = Date.now();
+      const failed = recallSession.failed || recallSession.hint >= 3;
+      const grade: RecallGrade = failed
+        ? "again"
+        : recallSession.hint > 0
+          ? "hard"
+          : "good";
+      const state = gradeCard(cardStates[recallCard.key], grade, now);
+      commitMemory(
+        recordReview(memory, recallSession.repId, recallCard.key, state, now),
+      );
+
+      advanceWith(mv);
+      setRecallSession((s) =>
+        s
+          ? {
+              ...s,
+              status: "solved",
+              lastWrong: null,
+              grade,
+              nextInterval: state.interval,
+              recalled: grade === "again" ? s.recalled : s.recalled + 1,
+              forgotten: grade === "again" ? s.forgotten + 1 : s.forgotten,
+              // Forgotten cards come back a few places later — relearning inside
+              // the sitting is what fixes them.
+              queue: grade === "again" ? requeue(s.queue, s.index) : s.queue,
+            }
+          : s,
+      );
+      return true;
+    },
+    [recallSession, recallCard, cardStates, memory, commitMemory, advanceWith],
+  );
+
   /* ---------------- Navigation ---------------- */
 
   // Latest "check this against the engine's move" handler for review mode, or
@@ -379,6 +513,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       const mv = tryMove(fen, input);
       if (!mv) return false;
       if (mode === "train") return handleTrainMove(mv);
+      if (mode === "recall") return handleRecallMove(mv);
       // Reviewing a finished game: the move follows the game, answers an open
       // challenge, or forks your own line off it — handleReviewMove decides.
       if (mode === "review") return reviewMoveRef.current?.(mv) ?? false;
@@ -395,7 +530,17 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       advanceWith(mv);
       return true;
     },
-    [fen, mode, handleTrainMove, advanceWith, stopAnimation, fixQueue, ply, line],
+    [
+      fen,
+      mode,
+      handleTrainMove,
+      handleRecallMove,
+      advanceWith,
+      stopAnimation,
+      fixQueue,
+      ply,
+      line,
+    ],
   );
 
   const goToPly = useCallback(
@@ -599,7 +744,8 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       setFixQueue(null);
       setModeState(m);
       if (m !== "review") clearReview();
-      if (m === "build") setSession(null);
+      if (m !== "train") setSession(null);
+      if (m !== "recall") setRecallSession(null);
     },
     [stopAnimation, clearReview],
   );
@@ -613,6 +759,7 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       stopAnimation();
       setFixQueue(null);
       clearReview();
+      setRecallSession(null);
       // Random order, but a full shuffled pass covers every line before a repeat.
       const lines = shuffle(lineSans);
       setLine([]);
@@ -719,6 +866,119 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
       };
     });
   }, []);
+
+  /* ---------------- Recall controls ---------------- */
+
+  /** Park the board on a card's position, with the moves that led there behind it. */
+  const showCard = useCallback((card: RecallCard | undefined) => {
+    const lead = buildLine(card?.lead ?? []);
+    setLine(lead);
+    setPly(lead.length);
+  }, []);
+
+  /**
+   * Begin a sitting. `cards` is the whole (thoroughness-filtered) card set — the
+   * caller owns that filter, as with `startTraining` — and the schedule decides
+   * which of them come up.
+   */
+  const startRecall = useCallback(
+    (cards: RecallCard[], options: RecallOptions = {}) => {
+      const rep = activeRepertoire;
+      if (!rep) return;
+      const { limit = RECALL_SESSION_SIZE, ignoreSchedule = false } = options;
+      stopAnimation();
+      setFixQueue(null);
+      clearReview();
+      setSession(null);
+      const states = memory.cards[rep.id] ?? {};
+      const queue = buildQueue(cards, states, {
+        limit,
+        now: Date.now(),
+        ignoreSchedule,
+      });
+      setOrientation(rep.color);
+      setModeState("recall");
+      showCard(queue[0]);
+      setRecallSession({
+        repId: rep.id,
+        color: rep.color,
+        queue,
+        index: 0,
+        planned: queue.length,
+        status: queue.length === 0 ? "empty" : "prompt",
+        hint: 0,
+        failed: false,
+        lastWrong: null,
+        grade: null,
+        nextInterval: null,
+        recalled: 0,
+        forgotten: 0,
+        extra: ignoreSchedule,
+      });
+    },
+    [activeRepertoire, memory, stopAnimation, clearReview, showCard],
+  );
+
+  const stopRecall = useCallback(() => {
+    stopAnimation();
+    setModeState("build");
+    setRecallSession(null);
+    setLine([]);
+    setPly(0);
+  }, [stopAnimation]);
+
+  const nextHint = useCallback(() => {
+    setRecallSession((s) => {
+      if (!s || s.status === "solved" || s.status === "done") return s;
+      const hint = Math.min(3, s.hint + 1) as HintLevel;
+      // Being shown the move outright counts as not knowing it.
+      return { ...s, hint, failed: s.failed || hint >= 3, status: "prompt" };
+    });
+  }, []);
+
+  const nextCard = useCallback(() => {
+    if (!recallSession) return;
+    const index = recallSession.index + 1;
+    if (index >= recallSession.queue.length) {
+      showCard(undefined);
+      setRecallSession((s) =>
+        s ? { ...s, index: s.queue.length, status: "done" } : s,
+      );
+      return;
+    }
+    showCard(recallSession.queue[index]);
+    setRecallSession((s) =>
+      s
+        ? {
+            ...s,
+            index,
+            status: "prompt",
+            hint: 0,
+            failed: false,
+            lastWrong: null,
+            grade: null,
+            nextInterval: null,
+          }
+        : s,
+    );
+  }, [recallSession, showCard]);
+
+  const resetMemory = useCallback(() => {
+    if (!activeId) return;
+    commitMemory(resetRepertoireMemory(memory, activeId));
+    setRecallSession(null);
+    if (mode === "recall") {
+      setModeState("build");
+      setLine([]);
+      setPly(0);
+    }
+  }, [activeId, memory, mode, commitMemory]);
+
+  // A sitting is bound to one repertoire; switching or deleting it mid-drill
+  // would grade cards into the wrong schedule.
+  useEffect(() => {
+    if (recallSession && activeId !== recallSession.repId) stopRecall();
+  }, [activeId, recallSession, stopRecall]);
 
   /* ---------------- Guided gap fixing ---------------- */
 
@@ -1029,6 +1289,16 @@ export function TrainerProvider({ children }: { children: React.ReactNode }) {
     restartLine,
     nextTrainingLine,
     prevTrainingLine,
+    recallSession,
+    recallCard,
+    cardStates,
+    reviewDays: memory.days,
+    memoryPersists,
+    startRecall,
+    stopRecall,
+    nextHint,
+    nextCard,
+    resetMemory,
     fixQueue,
     fixIndex,
     startFix,

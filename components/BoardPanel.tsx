@@ -40,6 +40,8 @@ const HIGHLIGHT = "rgba(250, 204, 21, 0.45)";
 const RED_HIGHLIGHT = "rgba(235, 66, 66, 0.6)";
 /** Square tint for a move that isn't part of the game at all. */
 const BRANCH_HIGHLIGHT = "rgba(56, 189, 248, 0.40)";
+/** Square tint for the recall hint that points at the piece to move. */
+const HINT_HIGHLIGHT = "rgba(168, 85, 247, 0.45)";
 
 /** Square tint for the move just played, by how good it was. */
 const REVIEW_TINT: Record<MoveClass, string> = {
@@ -119,6 +121,8 @@ export function BoardPanel({
     mode,
     turn,
     session,
+    recallSession,
+    recallCard,
     fixQueue,
     reviewSession,
     reviewChallenge,
@@ -131,15 +135,20 @@ export function BoardPanel({
     goEnd,
     prevFix,
     nextFix,
+    nextHint,
+    nextCard,
     flipBoard,
     resetBoard,
   } = t;
 
+  // Train and Recall both pin the board to a question; the difference is only
+  // what the question is (a line from move 1, or a single position).
+  const drilling = mode === "train" || mode === "recall";
   // While guiding a gap fix, the board must stay on the gap position (no free
   // play or reset). Stepping ←/→ through the line's moves to review it is still
-  // allowed — only training locks that out.
-  const navLocked = mode === "train" || fixQueue !== null;
-  const moveNavLocked = mode === "train";
+  // allowed — only drilling locks that out.
+  const navLocked = drilling || fixQueue !== null;
+  const moveNavLocked = drilling;
   // The gap sits at the end of `line`; scrubbed back to review, you can't grab
   // pieces until you step forward to the gap again.
   const atGap = fixQueue === null || ply === line.length;
@@ -326,7 +335,8 @@ export function BoardPanel({
     window.addEventListener("pointerup", onUp);
   };
 
-  // Keyboard navigation (not in training, where the board is pinned to a drill).
+  // Keyboard navigation. In Train the board is pinned to a line with nothing to
+  // navigate; Recall keeps its own two keys (hint / next card) instead.
   useEffect(() => {
     if (mode === "train") return;
     const onKey = (e: KeyboardEvent) => {
@@ -334,6 +344,14 @@ export function BoardPanel({
       if (el && ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName)) return;
       if (e.key === "f") {
         flipBoard();
+        return;
+      }
+      if (mode === "recall") {
+        if (e.key === "h") nextHint();
+        else if (e.key === "Enter" || e.key === " " || e.key === "ArrowRight") {
+          e.preventDefault();
+          nextCard();
+        }
         return;
       }
       if (e.key === "Escape") {
@@ -367,6 +385,8 @@ export function BoardPanel({
     restoreGame,
     prevFix,
     nextFix,
+    nextHint,
+    nextCard,
     goBack,
     goForward,
     goStart,
@@ -374,7 +394,29 @@ export function BoardPanel({
     flipBoard,
   ]);
 
-  const userChar = session ? (session.color === "white" ? "w" : "b") : null;
+  // The side whose move is being asked for while drilling.
+  const userChar =
+    mode === "recall"
+      ? recallSession
+        ? recallSession.color === "white"
+          ? "w"
+          : "b"
+        : null
+      : session
+        ? session.color === "white"
+          ? "w"
+          : "b"
+        : null;
+
+  // The move a recall card wants, while it's still being asked for. It feeds
+  // both rungs of the on-board hint ladder: the piece's square, then the arrow.
+  const hintMove = useMemo(() => {
+    if (mode !== "recall" || !recallSession || !recallCard) return null;
+    if (recallSession.status !== "prompt" && recallSession.status !== "wrong")
+      return null;
+    return tryMove(fen, recallCard.answers[0]);
+  }, [mode, recallSession, recallCard, fen]);
+  const hintLevel = mode === "recall" ? recallSession?.hint ?? 0 : 0;
 
   const offGame = mode === "review" && inVariation;
   const highlightStyles = useMemo(() => {
@@ -390,8 +432,12 @@ export function BoardPanel({
       styles[lastMove.from] = { background: tint };
       styles[lastMove.to] = { background: tint };
     }
+    // Second rung of the recall hint ladder: which piece, without saying where.
+    if (hintMove && hintLevel === 2) {
+      styles[hintMove.from] = { background: HINT_HIGHLIGHT };
+    }
     return styles;
-  }, [lastMove, reviewedMove, offGame]);
+  }, [lastMove, reviewedMove, offGame, hintMove, hintLevel]);
 
   // Click / tap to move: first tap selects a piece, second tap moves it.
   const [moveFrom, setMoveFrom] = useState<string | null>(null);
@@ -449,6 +495,12 @@ export function BoardPanel({
       const mv = tryMove(fen, expected);
       if (!mv) return [];
       raw = [{ startSquare: mv.from, endSquare: mv.to, color: "#22c55e" }];
+    } else if (mode === "recall") {
+      // Top rung of the hint ladder — the move itself.
+      if (!hintMove || hintLevel < 3) return [];
+      raw = [
+        { startSquare: hintMove.from, endSquare: hintMove.to, color: "#a855f7" },
+      ];
     } else if (mode === "review") {
       // Never draw the answer while it's still being asked for — including after
       // a wrong guess, when the user can step back onto the puzzle.
@@ -485,6 +537,8 @@ export function BoardPanel({
     inVariation,
     reviewedMove,
     challengeOpen,
+    hintMove,
+    hintLevel,
   ]);
 
   // Merge move highlights with the click-to-move option dots; also reused by the
@@ -556,7 +610,7 @@ export function BoardPanel({
       id: "trainer-board",
       squareRenderer,
       canDragPiece: ({ piece }: { piece: { pieceType: string } }) => {
-        if (mode === "train") {
+        if (drilling) {
           if (!userChar) return false;
           return piece.pieceType[0] === userChar && turn === userChar;
         }
@@ -613,7 +667,7 @@ export function BoardPanel({
         const canSelect =
           pc != null &&
           atGap &&
-          (mode === "train"
+          (drilling
             ? userChar != null && pc === userChar && turn === userChar
             : mode === "review"
               ? reviewLive && pc === turn
@@ -640,6 +694,7 @@ export function BoardPanel({
       arrows,
       squareRenderer,
       mode,
+      drilling,
       userChar,
       turn,
       playMove,

@@ -84,7 +84,7 @@ export interface ExplorerData {
 
 export type ExplorerDb = "lichess" | "masters";
 
-export type Mode = "build" | "train" | "review";
+export type Mode = "build" | "train" | "recall" | "review";
 
 export type TrainStatus = "playing" | "correct" | "wrong" | "complete" | "empty";
 

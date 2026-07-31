@@ -5,6 +5,7 @@ import { useTrainer } from "@/context/TrainerContext";
 import { useEngine } from "@/hooks/useEngine";
 import { useCoverage } from "@/hooks/useCoverage";
 import { useBookData } from "@/hooks/useBookData";
+import { useNow } from "@/hooks/useNow";
 import {
   DEFAULT_REVIEW_DEPTH,
   depthFor,
@@ -14,6 +15,7 @@ import {
 import { useMoveReview } from "@/hooks/useMoveReview";
 import type { ChessComGame } from "@/lib/chesscom";
 import { importantLines } from "@/lib/lines";
+import { collectCards, summarize } from "@/lib/memory";
 import { enumerateLines } from "@/lib/repertoire";
 import {
   DEFAULT_THOROUGHNESS,
@@ -32,6 +34,7 @@ import { RepertoireSelect } from "./RepertoireSelect";
 import { RepertoirePanel } from "./RepertoirePanel";
 import { ReviewPanel } from "./ReviewPanel";
 import { TrainPanel } from "./TrainPanel";
+import { RecallPanel } from "./RecallPanel";
 import { FixPanel } from "./FixPanel";
 
 type Tab = "analysis" | "repertoire" | "gaps";
@@ -50,6 +53,9 @@ export function ChessTrainer() {
     activeRepertoire,
     startTraining,
     stopTraining,
+    startRecall,
+    stopRecall,
+    cardStates,
     fixQueue,
     startFix,
     setMode,
@@ -59,6 +65,7 @@ export function ChessTrainer() {
     inVariation,
   } = useTrainer();
   const book = useBookData();
+  const now = useNow();
 
   const [engineOn, setEngineOnState] = useState(true);
   const [reviewOn, setReviewOnState] = useState(true);
@@ -132,19 +139,46 @@ export function ChessTrainer() {
     [activeRepertoire, book, thoroughness],
   );
 
-  // Changing the level while training restarts the drill with the new set.
+  // The positions Recall schedules, filtered by the same level. Every position
+  // where it's your move and you have an answer saved becomes one card.
+  const cardsFor = (level: Thoroughness) => {
+    if (!activeRepertoire) return [];
+    const all = collectCards(activeRepertoire, book);
+    if (!book) return all;
+    const min = minImportanceFor(level);
+    const kept = all.filter((c) => c.importance >= min);
+    // Same fallback as `importantLines`: a cutoff that filters everything out
+    // would leave nothing to drill at all.
+    return kept.length > 0 ? kept : all;
+  };
+  const recallCards = useMemo(
+    () => cardsFor(thoroughness),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeRepertoire, book, thoroughness],
+  );
+
+  // Positions waiting for attention — overdue reviews plus material never seen.
+  // Drives the badge on the Recall tab, so the work to do is visible from Build.
+  const dueCount = useMemo(() => {
+    const s = summarize(recallCards, cardStates, now);
+    return s.due + s.new;
+  }, [recallCards, cardStates, now]);
+
+  // Changing the level while drilling restarts it with the new set.
   const changeTrainLevel = (level: Thoroughness) => {
     changeThoroughness(level);
     if (mode === "train") startTraining(linesFor(level));
+    if (mode === "recall") startRecall(cardsFor(level));
   };
 
-  // If training was started before the book loaded (so it fell back to all
-  // lines), re-derive the level-filtered set once the book arrives.
+  // If a drill was started before the book loaded (so it fell back to the whole
+  // repertoire), re-derive the level-filtered set once the book arrives.
   const bookSyncedRef = useRef(false);
   useEffect(() => {
     if (!book || bookSyncedRef.current) return;
     bookSyncedRef.current = true;
     if (mode === "train") startTraining(linesFor(thoroughness));
+    if (mode === "recall") startRecall(cardsFor(thoroughness));
     // Fire once, on the book's first load, using the values current at that moment.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book]);
@@ -207,6 +241,7 @@ export function ChessTrainer() {
   const goBuild = () => {
     exitReview();
     stopTraining();
+    stopRecall();
   };
 
   // The opening book sits in its own left column while building; during
@@ -219,8 +254,10 @@ export function ChessTrainer() {
       <Header
         mode={mode}
         canTrain={!!activeRepertoire}
+        dueCount={dueCount}
         onBuild={goBuild}
         onTrain={() => startTraining(trainableLines)}
+        onRecall={() => startRecall(recallCards)}
         onReview={() => setMode("review")}
       />
 
@@ -281,6 +318,12 @@ export function ChessTrainer() {
             )
           ) : mode === "train" ? (
             <TrainPanel
+              level={thoroughness}
+              onLevelChange={changeTrainLevel}
+            />
+          ) : mode === "recall" ? (
+            <RecallPanel
+              cards={recallCards}
               level={thoroughness}
               onLevelChange={changeTrainLevel}
             />
@@ -357,18 +400,22 @@ export function ChessTrainer() {
 function Header({
   mode,
   canTrain,
+  dueCount,
   onBuild,
   onTrain,
+  onRecall,
   onReview,
 }: {
   mode: Mode;
   canTrain: boolean;
+  dueCount: number;
   onBuild: () => void;
   onTrain: () => void;
+  onRecall: () => void;
   onReview: () => void;
 }) {
   const tab = (active: boolean) =>
-    `rounded-md px-3 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
+    `flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-40 ${
       active ? "bg-emerald-600 text-white" : "text-slate-400 hover:text-slate-200"
     }`;
 
@@ -379,8 +426,8 @@ function Header({
           <span className="text-2xl">♞</span> Opening Trainer
         </h1>
         <p className="text-xs text-slate-500">
-          Build your repertoire with Stockfish &amp; the Lichess explorer, drill
-          it from memory, then review your real games.
+          Build your repertoire with Stockfish &amp; the Lichess explorer, commit
+          it to memory, then review your real games.
         </p>
       </div>
 
@@ -390,9 +437,33 @@ function Header({
         </button>
         <button
           type="button"
+          onClick={onRecall}
+          disabled={!canTrain}
+          title={
+            canTrain
+              ? "Spaced repetition — drill the positions you're about to forget"
+              : "Create a repertoire first"
+          }
+          className={tab(mode === "recall")}
+        >
+          🧠 Recall
+          {canTrain && dueCount > 0 && (
+            <span
+              className={`rounded-full px-1.5 text-[10px] font-bold ${
+                mode === "recall"
+                  ? "bg-emerald-800 text-emerald-100"
+                  : "bg-emerald-500/20 text-emerald-300"
+              }`}
+            >
+              {dueCount > 99 ? "99+" : dueCount}
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
           onClick={onTrain}
           disabled={!canTrain}
-          title={canTrain ? "Train this repertoire" : "Create a repertoire first"}
+          title={canTrain ? "Play whole lines end to end" : "Create a repertoire first"}
           className={tab(mode === "train")}
         >
           🎯 Train

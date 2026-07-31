@@ -45,13 +45,14 @@ Nearly all state and behavior lives in this one context, consumed via `useTraine
 
 - **Board position** as `line: LineMove[]` (half-moves from the start) plus a `ply` cursor. The current `fen` is _derived_: `fenAtPly(line, ply)`. Navigation (`goBack`/`goForward`/`playMove`/…) just moves `ply` or splices `line`; playing a move at a mid-line ply truncates the future.
 - **Repertoires** (loaded/saved to localStorage) and the active selection.
-- **Mode** (`build` | `train` | `review`) and, in train mode, the `TrainSession`.
+- **Mode** (`build` | `train` | `recall` | `review`) and, per drilling mode, its session (`TrainSession` / `RecallSession`).
+- **Spaced-repetition memory** (`memory`, `cardStates`) — the persisted review schedule Recall grades into.
 - **Gap-fixing queue** (`fixQueue`/`fixIndex`) for the guided Fix flow.
 - **Game review** (`reviewSession`, `reviewChallenge`, `variationFrom`) for the Review flow.
 
 `ChessTrainer.tsx` is the layout shell: it wires the shared hooks (engine, coverage, book, game review) and swaps the right-hand panel based on `mode`/`fixQueue`/active tab. `BoardPanel.tsx` renders the `react-chessboard` and handles keyboard nav.
 
-`playMove` dispatches on mode, using a ref per non-build mode (`fixSaveRef`, `reviewMoveRef`) so handlers defined later in the provider can be reached from a callback defined earlier. Follow that pattern rather than reordering the file.
+`playMove` dispatches on mode. `train` and `recall` are handled by callbacks defined just above it; `fix` and `review` need handlers defined *later* in the provider, so they're reached through a ref (`fixSaveRef`, `reviewMoveRef`). Follow whichever pattern the position in the file calls for rather than reordering it.
 
 ### Repertoire data model
 
@@ -74,6 +75,16 @@ Everything that indexes positions (book, gaps, coverage, the book builder) keys 
 
 Optionally, **danger scoring** (`lib/danger.ts` + `hooks/useDanger.ts`) evaluates each gap's off-book position with the background engine and rates how costly being unprepared there is (Sharp / Tricky / Quiet), from how far behind you'd be and how "only-move" the best reply is. Results are cached by FEN for the session.
 
+### Spaced repetition (`lib/memory.ts`)
+
+Train drills whole lines from move 1, so the first move of every line gets practised dozens of times and the move on ply 12 gets practised once — and nothing survives the tab closing. Recall inverts both.
+
+`collectCards` turns a repertoire into one **card per decision point**: a position where it's your move, keyed on the normalized FEN, holding *every* reply you have saved there (any counts as correct) plus the shortest lead-in and an `importance` computed exactly as in `importantLines`, so the same thoroughness cutoff applies. Keying on the position means transpositions collapse into one thing to remember.
+
+`gradeCard` is SM-2 with the self-rating removed — the grade is **derived from how the answer came out**, never asked for: clean recall is `good`, a hinted one is `hard`, and a wrong guess or a full reveal is `again` (interval reset, `lapses++`, back in ten minutes). `buildQueue` fills a sitting with overdue cards first, then new material by importance; `requeue` puts a just-forgotten card back a few places later so relearning happens *inside* the sitting.
+
+The whole store lives in localStorage under `chess-memory-v1` (`{ cards: { [repId]: { [posKey]: CardState } }, days }`). Unlike the repertoire saves, writes go through `commitMemory` rather than an effect, so a blocked localStorage surfaces in the UI instead of silently discarding every review.
+
 ### Game review
 
 `hooks/useGameReview.ts` sweeps a whole game: it builds `positions = [startFen, ...moves.map(m => m.fen)]`, scores terminal positions directly with `terminalEval` (Stockfish returns no lines on a mate, so never queue them), de-duplicates repeated positions, and searches the rest one at a time at MultiPV 2. Results stream in — the review is rebuilt every 4 completions.
@@ -91,6 +102,7 @@ Optionally, **danger scoring** (`lib/danger.ts` + `hooks/useDanger.ts`) evaluate
 
 - **Build**: play/analyze on the board with engine + book/explorer panels, save lines into the active repertoire.
 - **Train** (`TrainPanel`): drills every root-to-leaf line (shuffled), auto-plays the opponent's moves, and checks each user move against the expected SAN. All logic is in the provider's training section.
+- **Recall** (`RecallPanel`): the spaced-repetition drill. The board is dropped straight onto a scheduled position with its lead-in behind it, labelled by the deepest opening name the book knows along the way in. A three-rung **hint ladder** (name the piece → highlight its square → draw the arrow) replaces the binary reveal, and each rung taken caps the grade. Keyboard: `h` for the next hint, `Enter` for the next card. The panel also surfaces deck health (memorised %, due/new counts, day streak) and a **leech list** — positions you keep forgetting, which want understanding in Build mode rather than more repetitions.
 - **Fix gaps** (`FixPanel`): walks the ranked gap queue, pinning the board to each gap position; picking a suggested reply saves it and advances. ←/→ step through the moves that lead to the gap, ↑/↓ walk the queue; you can only play a reply *at* the gap (`atGap`).
 - **Move review** (`hooks/useMoveReview.ts` + `lib/classify.ts` + `lib/moveSummary.ts`): while building with the engine on, a background instance grades every move of the line you're playing and the board shows a chess.com-style reaction disc. `lib/classify.ts` owns that vocabulary (`brilliant`/`great`/`best`/…/`miss`/`blunder`) and `components/MoveClassBadge.tsx` renders it — game review reuses the same disc, since `lib/review.ts`'s classes are a subset.
 - **Review** (`GameBrowser` → `ReviewPanel` + `CoachCard` + `EvalGraph`): type a Chess.com username, pick a game, and Stockfish grades every move. The board is **yours to explore**: a move either follows the game, answers an open challenge, or forks a side line off it (`branch = { from, source }`), and the reviewed game — which lives in `reviewSession.game`, never in `line` — is always one `restoreGame()` away. `branch.from` may only ever move *down*, since navigation is unlocked and you can step back and re-fork earlier. Inside a side line the live engine takes over the eval bar and arrows, because the sweep has no data there. `lib/pgn.ts` parses the PGN, including `{[%clk …]}` clocks.
