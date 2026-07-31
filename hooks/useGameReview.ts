@@ -12,19 +12,8 @@ import {
   type PositionEval,
 } from "@/lib/review";
 
-/** Depth presets offered in the UI, cheapest first. */
-export const REVIEW_DEPTHS = [
-  { id: "quick", label: "Quick", depth: 10, blurb: "Fastest — catches obvious blunders" },
-  { id: "standard", label: "Standard", depth: 25, blurb: "Balanced — the default" },
-  { id: "deep", label: "Deep", depth: 30, blurb: "Slowest — most thorough" },
-] as const;
-
-export type ReviewDepthId = (typeof REVIEW_DEPTHS)[number]["id"];
-export const DEFAULT_REVIEW_DEPTH: ReviewDepthId = "standard";
-
-export function depthFor(id: ReviewDepthId): number {
-  return REVIEW_DEPTHS.find((d) => d.id === id)?.depth ?? 25;
-}
+/** The one depth every game is swept at. */
+export const REVIEW_DEPTH = 20;
 
 /** Two lines let us tell "the only move" apart from "one of several fine moves". */
 const REVIEW_MULTIPV = 2;

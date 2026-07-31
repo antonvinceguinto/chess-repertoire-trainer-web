@@ -2,11 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useTrainer } from "@/context/TrainerContext";
-import {
-  REVIEW_DEPTHS,
-  type ReviewDepthId,
-  type ReviewProgress,
-} from "@/hooks/useGameReview";
+import type { ReviewProgress } from "@/hooks/useGameReview";
 import {
   colorOf,
   endReason,
@@ -31,8 +27,6 @@ import { Button, Panel, PanelHeader } from "./ui";
 interface Props {
   review: GameReview | null;
   progress: ReviewProgress;
-  depthId: ReviewDepthId;
-  onDepthChange: (id: ReviewDepthId) => void;
 }
 
 type View = "summary" | "moves";
@@ -42,12 +36,7 @@ type View = "summary" | "moves";
  * accuracy score for each side, and the coach's explanation of whatever the
  * board is currently showing.
  */
-export function ReviewPanel({
-  review,
-  progress,
-  depthId,
-  onDepthChange,
-}: Props) {
+export function ReviewPanel({ review, progress }: Props) {
   const {
     reviewSession,
     reviewChallenge,
@@ -290,8 +279,6 @@ export function ReviewPanel({
               onJump={jumpTo}
               running={progress.running}
             />
-
-            <DepthSelector depthId={depthId} onChange={onDepthChange} />
           </div>
         ) : (
           <AnnotatedMoves
@@ -509,41 +496,3 @@ function AnnotatedMoves({
   );
 }
 
-function DepthSelector({
-  depthId,
-  onChange,
-}: {
-  depthId: ReviewDepthId;
-  onChange: (id: ReviewDepthId) => void;
-}) {
-  const active = REVIEW_DEPTHS.find((d) => d.id === depthId);
-  return (
-    <div className="border-t border-slate-800 pt-2">
-      <div className="flex items-center gap-2">
-        <span className="shrink-0 text-[12px] lg:text-[13px] text-slate-500">Depth</span>
-        <div className="flex flex-1 rounded-md border border-slate-700 bg-slate-800/60 p-0.5 text-[12px] lg:text-[13px]">
-          {REVIEW_DEPTHS.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              onClick={() => onChange(d.id)}
-              title={d.blurb}
-              className={`flex-1 rounded px-2 py-0.5 font-medium transition ${
-                depthId === d.id
-                  ? "bg-slate-700 text-white"
-                  : "text-slate-400 hover:text-slate-200"
-              }`}
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      {active && (
-        <p className="mt-1 text-[11px] lg:text-[12px] text-slate-600">
-          {active.blurb}. Changing this re-runs the review.
-        </p>
-      )}
-    </div>
-  );
-}
